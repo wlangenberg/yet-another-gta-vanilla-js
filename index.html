@@ -46,21 +46,21 @@
                 this.height = height;
                 this.color = color;
                 this.dy = 0;
-                this.jumpForce = 5;
-                this.maxSpeed = 5;
-                this.friction = 0.98;
+                this.jumpForce = 10;
+                this.maxSpeed = 25;
+                this.friction = 0.82;
                 this.speed = 0;
                 this.direction = 0;
-                this.acceleration = 0.1;
+                this.acceleration = 2.7;
                 this.originalHeight = height;
                 this.grounded = false;
                 this.jumpTimer = 0;
             }
 
             animate() {
-                this.dy += 0.2;
+                this.dy += 0.8;
                 this.y += this.dy;
-                this.speed *= this.friction;
+                if (this.grounded) this.speed *= this.friction;
 
                 this.x += this.speed * this.direction;
 
@@ -82,7 +82,6 @@
             }
 
             draw() {
-                <!-- console.log(`X: ${this.x}, Y: ${this.y}, WIDTH: ${this.width}, HEIGHT: ${this.height}`); -->
                 ctx.fillStyle = this.color;
                 ctx.fillRect(this.x, this.y, this.width, this.height);
             }
@@ -140,20 +139,28 @@
         const platform = new Platform(0, canvas.height - 100, canvas.width, 100, 'blue');
         player.draw();
         platform.draw();
-        const tick = () => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            player.animate();
-            player.move();
-            platform.draw();
-            requestAnimationFrame(tick);
-        }
+        const fps = 60;
+        const interval = 1000 / fps;
+        let lastTime = 0;
 
-        tick();
+        const tick = (timestamp) => {
+            if (timestamp - lastTime >= interval) {
+                lastTime = timestamp;
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                player.animate();
+                player.move();
+                platform.draw();
+            }
+
+            requestAnimationFrame(tick);
+        };
+
+        tick(0);
+
 
         window.addEventListener('keydown', (e) => {
-            <!-- console.log(e.code); -->
             keys[e.code] = true;
-            <!-- console.log(keys) -->
         });
 
         window.addEventListener('keyup', (e) => {
