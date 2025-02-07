@@ -25,6 +25,20 @@
                 position: absolute;
             }
         </style>
+        <script>
+            const players = [];
+            // Connect to localhost ws server for player movement
+            const ws = new WebSocket('ws://localhost:8081/ws');
+            ws.onopen = () => {
+                console.log('Connected to server');
+            }
+            ws.onmessage = (message) => {
+                console.log(message.data);
+            }
+            let sendMessages = (msg) => {
+                ws.send(JSON.stringify(msg));
+            }
+        </script>
     </head>
     <body>
         <canvas></canvas>
@@ -153,6 +167,7 @@
                 platform.draw();
             }
 
+        otherplayers = [];
             requestAnimationFrame(tick);
         };
 
