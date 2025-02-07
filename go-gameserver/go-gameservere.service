@@ -1,0 +1,14 @@
+[Unit]
+Description=Go Game Server
+After=network.target
+
+[Service]
+ExecStart=/path/to/project/go-gameserver/bin/go-echo
+WorkingDirectory=/path/to/project/go-gameserver
+Restart=always
+User=youruser
+Group=yourgroup
+
+[Install]
+WantedBy=multi-user.target
+
