@@ -1,3 +1,5 @@
+import { ctx } from '/constants.js';
+
 class Platform {
     constructor(x, y, width, height, color) {
         this.x = x;
@@ -12,3 +14,5 @@ class Platform {
         ctx.fillRect(this.x, this.y, this.width, this.height);
     }
 }
+
+export { Platform };

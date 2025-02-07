@@ -1,6 +1,8 @@
+import { canvas, ctx, gravity, keys } from '/constants.js';
+
 class Player {
     constructor(x, y, width, height, color) {
-        this.id = Math.random();
+        this.id = Math.floor(Math.random() * (2 ** 31)),
         this.name = "Player" + this.id;
         this.x = x;
         this.y = y;
@@ -91,19 +93,5 @@ class Player {
     }
 }
 
-function createPlayerFromJson(json) {
-    const player = new Player(json.x, json.y, json.width, json.height, json.color);
-    player.id = json.id;
-    player.name = json.name;
-    player.dy = json.dy;
-    player.jumpForce = json.jumpForce;
-    player.maxSpeed = json.maxSpeed;
-    player.friction = json.friction;
-    player.speed = json.speed;
-    player.direction = json.direction;
-    player.acceleration = json.acceleration;
-    player.originalHeight = json.originalHeight;
-    player.grounded = json.grounded;
-    player.jumpTimer = json.jumpTimer;
-    return player;
-}
+
+export { Player };

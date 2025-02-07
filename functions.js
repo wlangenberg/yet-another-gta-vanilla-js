@@ -1,10 +1,7 @@
-const canvas = document.querySelector('canvas');
-const ctx = canvas.getContext('2d');
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+import { Player } from './src/scripts/player/player.js';
+import { Platform } from './src/scripts/assets/platform/platform.js';
+import { keys, ctx, canvas } from './constants.js';
 
-const gravity = 0.1;
-const keys = [];
 let players = [];
 
 const ws = new WebSocket('ws://localhost:8081/ws');
@@ -17,7 +14,6 @@ ws.onmessage = (message) => {
     try {
         const data = JSON.parse(message.data);
         const player = createPlayerFromJson(data);
-        let found = false;
         if (player.id === myplayer.id) {
             return;
         }
@@ -31,6 +27,23 @@ ws.onmessage = (message) => {
     } catch (error) {
         console.error(error);
     }
+}
+
+function createPlayerFromJson(json) {
+    const player = new Player(json.x, json.y, json.width, json.height, json.color);
+    player.id = json.id;
+    player.name = json.name;
+    player.dy = json.dy;
+    player.jumpForce = json.jumpForce;
+    player.maxSpeed = json.maxSpeed;
+    player.friction = json.friction;
+    player.speed = json.speed;
+    player.direction = json.direction;
+    player.acceleration = json.acceleration;
+    player.originalHeight = json.originalHeight;
+    player.grounded = json.grounded;
+    player.jumpTimer = json.jumpTimer;
+    return player;
 }
 
 let updatePlayerState = (playerData) => {
@@ -75,3 +88,5 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => {
     keys[e.code] = false;
 });
+
+export { myplayer };
