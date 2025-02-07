@@ -3,6 +3,7 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="functions.js"></script>
         <title>Document</title>
         <style>
             body {
@@ -26,18 +27,6 @@
             }
         </style>
         <script>
-            const players = [];
-            // Connect to localhost ws server for player movement
-            const ws = new WebSocket('ws://localhost:8081/ws');
-            ws.onopen = () => {
-                console.log('Connected to server');
-            }
-            ws.onmessage = (message) => {
-                console.log(message.data);
-            }
-            let sendMessages = (msg) => {
-                ws.send(JSON.stringify(msg));
-            }
         </script>
     </head>
     <body>
@@ -49,14 +38,13 @@
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
         const gravity = 0.1;
-        const fps = 144;
-        const interval = 1000 / fps;
         const keys = [];
-        let lastTime = 0;
-
+        let players = [];
 
         class Player {
             constructor(x, y, width, height, color) {
+                this.id = getRandomUInt();
+                this.name = "Player" + this.id;
                 this.x = x;
                 this.y = y;
                 this.width = width;
@@ -80,6 +68,7 @@
                 this.y += this.dy;
                 if (this.grounded) this.speed *= interval * this.friction;
 
+                this.speed = this.speed < 0.001 ? 0 : this.speed;
                 this.x += Math.min(this.maxSpeed * interval, this.speed) * this.direction;
                 
 
@@ -97,7 +86,7 @@
                 }
 
                 this.draw();
-                console.log("SPEED:", this.speed, "ACCELERATION:", this.acceleration, "DIRECTION:", this.direction)
+                <!-- console.log("SPEED:", this.speed, "ACCELERATION:", this.acceleration, "DIRECTION:", this.direction) -->
             }
 
             draw() {
@@ -170,22 +159,80 @@
             }
         }
 
-        const player = new Player(20, 20, 50, 50, 'white');
+        function createPlayerFromJson(json) {
+            const player = new Player(json.x, json.y, json.width, json.height, json.color);
+            player.id = json.id;
+            player.name = json.name;
+            player.dy = json.dy;
+            player.jumpForce = json.jumpForce;
+            player.maxSpeed = json.maxSpeed;
+            player.friction = json.friction;
+            player.speed = json.speed;
+            player.direction = json.direction;
+            player.acceleration = json.acceleration;
+            player.originalHeight = json.originalHeight;
+            player.grounded = json.grounded;
+            player.jumpTimer = json.jumpTimer;
+            return player;
+        }
+
+        const ws = new WebSocket('ws://localhost:8081/ws');
+
+        ws.onopen = () => {
+            console.log('Connected to server');
+        }
+
+        ws.onmessage = (message) => {
+            try {
+                const data = JSON.parse(message.data);
+                const player = createPlayerFromJson(data);
+                let found = false;
+                if (player.id === myplayer.id) {
+                    return;
+                }
+                for (let j = 0; j < players.length; j++) {
+                    if (players[j].id === player.id) {
+                        players[j] = player;
+                        return
+                    }
+                }
+                players.push(player);
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        let updatePlayerState = (playerData) => {
+            <!-- console.log("Sending player state to server", playerData); -->
+            ws.send(JSON.stringify(playerData));
+        }
+
+        const myplayer = new Player(20, 20, 50, 50, 'white');
         const platform = new Platform(0, canvas.height - 100, canvas.width, 100, 'blue');
-        player.draw();
+        myplayer.draw();
         platform.draw();
+        const fps = 144;
+        const interval = 1000 / fps;
+        let lastTime = 0;
 
         const tick = (timestamp) => {
             if (timestamp - lastTime >= interval) {
                 lastTime = timestamp;
                 
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                player.animate(interval);
-                player.move(interval);
+                myplayer.animate(interval);
+                myplayer.move(interval);
                 platform.draw();
+
+                for (let i = 0; i < players.length; i++) {
+                    players[i].draw();
+                }
+                if (myplayer.speed > 0) {
+                    updatePlayerState(myplayer);
+                }
             }
 
-        otherplayers = [];
+
             requestAnimationFrame(tick);
         };
 
