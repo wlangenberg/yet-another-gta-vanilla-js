@@ -48,8 +48,11 @@
         const ctx = canvas.getContext('2d');
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-
+        const gravity = 0.1;
+        const fps = 144;
+        const interval = 1000 / fps;
         const keys = [];
+        let lastTime = 0;
 
 
         class Player {
@@ -62,21 +65,23 @@
                 this.dy = 0;
                 this.jumpForce = 10;
                 this.maxSpeed = 25;
-                this.friction = 0.82;
+                this.friction = 0.12;
                 this.speed = 0;
                 this.direction = 0;
-                this.acceleration = 2.7;
+                this.maxAcceleration = 4;
+                this.acceleration = 0;
                 this.originalHeight = height;
                 this.grounded = false;
                 this.jumpTimer = 0;
             }
 
-            animate() {
-                this.dy += 0.8;
+            animate(interval) { 
+                this.dy += gravity * interval;
                 this.y += this.dy;
-                if (this.grounded) this.speed *= this.friction;
+                if (this.grounded) this.speed *= interval * this.friction;
 
-                this.x += this.speed * this.direction;
+                this.x += Math.min(this.maxSpeed * interval, this.speed) * this.direction;
+                
 
                 // Check for jump time
                 if (this.jumpTimer > 0) {
@@ -92,7 +97,7 @@
                 }
 
                 this.draw();
-                <!-- console.log("SPEED:", this.speed, this.direction); -->
+                console.log("SPEED:", this.speed, "ACCELERATION:", this.acceleration, "DIRECTION:", this.direction)
             }
 
             draw() {
@@ -100,37 +105,53 @@
                 ctx.fillRect(this.x, this.y, this.width, this.height);
             }
 
-            move() {
-                if (keys['ArrowRight']) {
-                    if (this.speed > 1 && this.direction === -1) {
-                        this.speed -= this.acceleration/4;
-                        this.speed = Math.max(0, this.speed);
-                        return;
-                    }
-                    if (this.grounded) {
-                        this.direction = 1;
-                        this.speed += this.acceleration;
-                        this.speed = Math.min(this.maxSpeed, this.speed);
-                    }
-                }
-                if (keys['ArrowLeft']) {
-                    if (this.speed > 1 && this.direction === 1) {
-                        this.speed -= this.acceleration/4;
-                        this.speed = Math.max(0, this.speed);
-                        return;
-                    } 
-                    if (this.grounded) {
-                        this.direction = -1;
-                        this.speed += this.acceleration;
-                        this.speed = Math.min(this.maxSpeed, this.speed);
-                    }
-
-                }
+            move(interval) {
+                // let acceleration = this.acceleration * interval;
                 if (keys['ArrowUp'] && this.grounded) {
                     this.jumpTimer = 12;
                     this.y -= 10;
                     this.grounded = false;
                 }
+                if (keys['ArrowRight']) {
+                    // If the player is going left and the speed is greater than 1
+                    if (this.acceleration > 0 && this.direction === -1) {
+                        this.speed -= this.acceleration;
+                        if (this.speed < 0) {
+                            this.speed = 0;
+                            this.acceleration = 0;
+                        }
+                        // this.speed = Math.max(0, this.speed);
+                        return;
+                    }
+
+                    // GOING FORWARD
+                    if (this.grounded) {
+                        this.direction = 1;
+                        this.acceleration = Math.min(this.maxAcceleration, this.acceleration + 0.01 * interval);
+                        this.speed += this.acceleration;
+                        return
+                    }
+                }
+                if (keys['ArrowLeft']) {
+                    if (this.acceleration > 0 && this.direction === 1) {
+                        this.speed -= this.acceleration;
+                        if (this.speed < 0) {
+                            this.speed = Math.abs(this.speed);
+                            this.acceleration = 0;
+                        }
+                        return;
+                    } 
+
+                    // GOING FORWARD
+                    if (this.grounded) {
+                        this.direction = -1;
+                        this.acceleration = Math.min(this.maxAcceleration, this.acceleration + 0.01 * interval);
+                        this.speed += this.acceleration;
+                        return
+                    }
+
+                }
+                this.acceleration = 0;
             }
         }
 
@@ -153,17 +174,14 @@
         const platform = new Platform(0, canvas.height - 100, canvas.width, 100, 'blue');
         player.draw();
         platform.draw();
-        const fps = 60;
-        const interval = 1000 / fps;
-        let lastTime = 0;
 
         const tick = (timestamp) => {
             if (timestamp - lastTime >= interval) {
                 lastTime = timestamp;
                 
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                player.animate();
-                player.move();
+                player.animate(interval);
+                player.move(interval);
                 platform.draw();
             }
 
