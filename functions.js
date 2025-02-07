@@ -4,7 +4,12 @@ import { keys, ctx, canvas } from './constants.js';
 
 let players = [];
 
-const ws = new WebSocket('ws://localhost:8081/ws');
+let ws;
+if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+    ws = new WebSocket(`ws://localhost:8081/ws`);
+} else {
+    ws = new WebSocket(`ws://${location.hostname}/ws`);
+}
 
 ws.onopen = () => {
     console.log('Connected to server');
