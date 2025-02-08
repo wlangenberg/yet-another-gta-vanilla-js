@@ -81,6 +81,9 @@ const platforms = [
     new Platform(100, 400, 150, 20, 'red'),
     new Platform(-200, 300, 350, 20, 'red'),
     new Platform(-300, 200, 350, 20, 'red'),
+    new Platform(-500, 50, 350, 20, 'red'),
+    new Platform(-600, -100, 350, 20, 'red'),
+    new Platform(-700, -200, 350, 20, 'red'),
     new Platform(800, 400, 100, 20, 'yellow')
 ];
 

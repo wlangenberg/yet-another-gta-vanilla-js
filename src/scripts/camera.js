@@ -25,11 +25,13 @@ class Camera {
   }
 
   update(dt) {
-    // Calculate target position centered on player with latency
     this.targetX = this.player.x - this.viewportWidth / 2;
     
-    const thresholdY = this.canvas.height * (1/4);
-    if (this.player.y < thresholdY || this.player.y > this.defaultY + this.canvas.height - thresholdY) {
+    const thresholdY = this.canvas.height * (5/6);
+    const lowerBound = this.defaultY - this.canvas.height + Math.abs((Math.abs(this.defaultY) - this.canvas.height) / 2);
+    const upperBound = this.defaultY + this.canvas.height - thresholdY;
+    
+    if (this.player.y < lowerBound || this.player.y > upperBound) {
       this.targetY = this.player.y - this.viewportHeight / 2;
     } else {
       this.targetY = this.defaultY - this.canvas.height;
