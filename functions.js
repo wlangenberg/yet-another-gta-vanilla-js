@@ -1,6 +1,7 @@
 import { Player } from './src/scripts/player/player.js';
 import { Platform } from './src/scripts/assets/platform/platform.js';
 import { keys, ctx, canvas } from './constants.js';
+import Camera from './src/scripts/camera.js';
 
 let players = [];
 let ws;
@@ -77,8 +78,9 @@ const platforms = [
     new Platform(800, 500, 100, 20, 'yellow')
 ];
 
-myplayer.draw();
+const camera = new Camera(myplayer, canvas, { smoothness: 0.1, minZoom: 1, maxZoom: 2, zoom: 1, latency: 0.1 });
 
+myplayer.draw();
 
 const fps = 144;
 const interval = 1000 / fps;
@@ -89,6 +91,13 @@ const tick = (timestamp) => {
         lastTime = timestamp;
         
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        camera.update(interval);
+        const transform = camera.getTransform();
+        ctx.save();
+        ctx.translate(transform.x, transform.y);
+        ctx.scale(transform.scale, transform.scale);
+
         myplayer.animate(interval, platforms);
         myplayer.move(interval);
         platforms.forEach(platform => platform.draw());
@@ -96,9 +105,12 @@ const tick = (timestamp) => {
         for (let i = 0; i < players.length; i++) {
             players[i].draw();
         }
+
         if (myplayer.speed > 0) {
             updatePlayerState(myplayer);
         }
+
+        ctx.restore();
     }
 
     requestAnimationFrame(tick);
