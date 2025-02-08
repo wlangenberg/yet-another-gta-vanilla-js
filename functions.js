@@ -3,6 +3,9 @@ import { Platform } from './src/scripts/assets/platform/platform.js';
 import { keys, ctx, canvas } from './constants.js';
 import Camera from './src/scripts/camera.js';
 
+const WORLD_WIDTH = 1024;
+const WORLD_HEIGHT = 768;
+
 let players = [];
 let ws;
 
@@ -70,15 +73,18 @@ let updatePlayerState = (playerData) => {
     }
 }
 
-const myplayer = new Player(20, 20, 50, 50, 'white');
+const myplayer = new Player(WORLD_WIDTH / 2, WORLD_HEIGHT - 50, 50, 50, 'white');
 const platforms = [
-    new Platform(0, canvas.height - 100, canvas.width, 100, 'blue'), // Ground platform
-    new Platform(200, 400, 200, 20, 'green'),
+    new Platform(0, WORLD_HEIGHT - 100, WORLD_WIDTH, 100, 'blue'), // Ground platform
+    new Platform(200, 500, 200, 50, 'red'),
     new Platform(500, 600, 150, 20, 'red'),
-    new Platform(800, 500, 100, 20, 'yellow')
+    new Platform(100, 400, 150, 20, 'red'),
+    new Platform(-200, 300, 350, 20, 'red'),
+    new Platform(-300, 200, 350, 20, 'red'),
+    new Platform(800, 400, 100, 20, 'yellow')
 ];
 
-const camera = new Camera(myplayer, canvas, { smoothness: 0.1, minZoom: 1, maxZoom: 2, zoom: 1, latency: 0.1 });
+const camera = new Camera(myplayer, canvas, { worldHeight: WORLD_HEIGHT, smoothness: 0.1, minZoom: 1, maxZoom: 2, zoom: 1, latency: 0.1 });
 
 myplayer.draw();
 
