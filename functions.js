@@ -88,6 +88,15 @@ const camera = new Camera(myplayer, canvas, { worldHeight: WORLD_HEIGHT, smoothn
 
 myplayer.draw();
 
+const resizeCanvas = () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    camera.setZoom(1)
+}
+
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas()
+
 const fps = 144;
 const interval = 1000 / fps;
 let lastTime = 0;
