@@ -68,9 +68,15 @@ let updatePlayerState = (playerData) => {
 }
 
 const myplayer = new Player(20, 20, 50, 50, 'white');
-const platform = new Platform(0, canvas.height - 100, canvas.width, 100, 'blue');
+const platforms = [
+    new Platform(0, canvas.height - 100, canvas.width, 100, 'blue'), // Ground platform
+    new Platform(200, 400, 200, 20, 'green'),
+    new Platform(500, 600, 150, 20, 'red'),
+    new Platform(800, 500, 100, 20, 'yellow')
+];
+
 myplayer.draw();
-platform.draw();
+
 
 const fps = 144;
 const interval = 1000 / fps;
@@ -81,9 +87,10 @@ const tick = (timestamp) => {
         lastTime = timestamp;
         
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        myplayer.animate(interval);
+        myplayer.animate(interval, platforms);
         myplayer.move(interval);
-        platform.draw();
+        // platform.draw();
+        platforms.forEach(platform => platform.draw());
 
         for (let i = 0; i < players.length; i++) {
             players[i].draw();
@@ -106,4 +113,4 @@ window.addEventListener('keyup', (e) => {
     keys[e.code] = false;
 });
 
-export { myplayer };
+export { myplayer, platforms };

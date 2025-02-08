@@ -22,7 +22,7 @@ class Player {
         this.jumpTimer = 0;
     }
 
-    animate(interval) { 
+    animate(interval, platforms) { 
         this.dy += gravity * interval;
         this.y += this.dy;
         if (this.grounded) this.speed *= interval * this.friction;
@@ -35,6 +35,15 @@ class Player {
             this.dy = -this.jumpForce;
         }
 
+        // Reset grounded state before checking collisions
+        this.grounded = false;
+        
+        // Check platform collisions (platforms will be passed in from game loop)
+        if (platforms) {
+            platforms.forEach(platform => platform.handleCollision(this));
+        }
+        
+        // Fallback ground collision
         if (this.y + this.height > canvas.height - 100) {
             this.y = canvas.height - this.height - 100;
             this.grounded = true;
