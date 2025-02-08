@@ -1,7 +1,7 @@
 import { Player } from './src/scripts/player/player.js';
 import { Platform } from './src/scripts/assets/platform/platform.js';
 import { keys, ctx, canvas } from './constants.js';
-import Camera from './src/scripts/camera.js';
+import Camera from './src/scripts/camera/camera.js';
 
 const WORLD_WIDTH = 1024;
 const WORLD_HEIGHT = 768;
