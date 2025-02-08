@@ -3,8 +3,8 @@ import { Platform } from './src/scripts/assets/platform/platform.js';
 import { keys, ctx, canvas } from './constants.js';
 
 let players = [];
-
 let ws;
+
 if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
     ws = new WebSocket(`ws://localhost:8081/ws`);
 } else {
@@ -18,17 +18,29 @@ ws.onopen = () => {
 ws.onmessage = (message) => {
     try {
         const data = JSON.parse(message.data);
-        const player = createPlayerFromJson(data);
-        if (player.id === myplayer.id) {
-            return;
-        }
-        for (let j = 0; j < players.length; j++) {
-            if (players[j].id === player.id) {
-                players[j] = player;
-                return
+        if (data.type === 'PlayerUpdate') {
+            const player = createPlayerFromJson(data?.player);
+            if (player.id === myplayer.id) {
+                return;
             }
+            for (let j = 0; j < players.length; j++) {
+                if (players[j].id === player.id) {
+                    players[j] = player;
+                    return
+                }
+            }
+            players.push(player);
+        } else if (data.type === 'PlayerDisconnect') {
+            for (let j = 0; j < players.length; j++) {
+                if (players[j].id === data.id) {
+                    players.splice(j, 1);
+                    return;
+                }
+            }
+        } else {
+            console.debug(`Unknown message type: ${data.type}`);
         }
-        players.push(player);
+
     } catch (error) {
         console.error(error);
     }
