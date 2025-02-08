@@ -64,7 +64,9 @@ function createPlayerFromJson(json) {
 }
 
 let updatePlayerState = (playerData) => {
-    ws.send(JSON.stringify(playerData));
+    if (ws.readyState === 1) {
+        ws.send(JSON.stringify(playerData));
+    }
 }
 
 const myplayer = new Player(20, 20, 50, 50, 'white');
@@ -89,7 +91,6 @@ const tick = (timestamp) => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         myplayer.animate(interval, platforms);
         myplayer.move(interval);
-        // platform.draw();
         platforms.forEach(platform => platform.draw());
 
         for (let i = 0; i < players.length; i++) {
