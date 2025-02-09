@@ -3,12 +3,11 @@ import { Platform } from './src/scripts/assets/platform/platform.js';
 import { keys, ctx, canvas } from './constants.js';
 import Camera from './src/scripts/camera/camera.js';
 
-const platforms = []
+const gameObjects = []
 
 const WORLD_WIDTH = 1024;
 const WORLD_HEIGHT = 768;
 
-let players = [];
 let ws;
 
 if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
@@ -29,17 +28,17 @@ ws.onmessage = (message) => {
             if (player.id === myplayer.id) {
                 return;
             }
-            for (let j = 0; j < players.length; j++) {
-                if (players[j].id === player.id) {
-                    players[j] = player;
+            for (let j = 0; j < gameObjects.length; j++) {
+                if (gameObjects[j].id === player.id) {
+                    gameObjects[j] = player;
                     return
                 }
             }
-            players.push(player);
+            gameObjects.push(player);
         } else if (data.type === 'PlayerDisconnect') {
-            for (let j = 0; j < players.length; j++) {
-                if (players[j].id === data.id) {
-                    players.splice(j, 1);
+            for (let j = 0; j < gameObjects.length; j++) {
+                if (gameObjects[j].id === data.id) {
+                    gameObjects.splice(j, 1);
                     return;
                 }
             }
@@ -53,19 +52,10 @@ ws.onmessage = (message) => {
 }
 
 function createPlayerFromJson(json) {
-    const player = new Player(json.x, json.y, json.width, json.height, json.color);
+    const player = new Player(json.x, json.y, json.width, json.height, json.color, ctx, true);
     player.id = json.id;
     player.name = json.name;
-    player.dy = json.dy;
     player.jumpForce = json.jumpForce;
-    player.maxSpeed = json.maxSpeed;
-    player.friction = json.friction;
-    player.speed = json.speed;
-    player.direction = json.direction;
-    player.acceleration = json.acceleration;
-    player.originalHeight = json.originalHeight;
-    player.grounded = json.grounded;
-    player.jumpTimer = json.jumpTimer;
     return player;
 }
 
@@ -76,14 +66,13 @@ let updatePlayerState = (playerData) => {
 }
 
 const myplayer = new Player(WORLD_WIDTH / 2, WORLD_HEIGHT - 50, 50, 50, 'white', ctx, true);
-
 fetch('level.json')
     .then(response => response.json())
     .then(levelData => {
-        platforms.length = 0
         levelData.rectangles.forEach(rect => {
-            platforms.push(new Platform(rect.x, rect.y, rect.width, rect.height, 'red', ctx, false, ))
+            gameObjects.push(new Platform(rect.x, rect.y, rect.width, rect.height, 'red', ctx, false, ))
         });
+        gameObjects.push(myplayer)
     })
     .catch(error => console.error('Error loading level:', error));
 
@@ -114,17 +103,11 @@ const tick = (timestamp) => {
         ctx.translate(transform.x, transform.y);
         ctx.scale(transform.scale, transform.scale);
 
-        myplayer.update(interval, platforms);
-        platforms.forEach(platform => platform.update(interval));
-
-        for (let i = 0; i < players.length; i++) {
-            players[i].update(interval, platforms);
+        for (let i = 0; i < gameObjects.length; i++) {
+            gameObjects[i].update(interval, gameObjects)
         }
 
-        if (myplayer.velocity.x !== 0 || myplayer.velocity.y !== 0) {
-            updatePlayerState(myplayer);
-        }
-
+        updatePlayerState(myplayer);
         ctx.restore();
     }
 
@@ -141,4 +124,4 @@ window.addEventListener('keyup', (e) => {
     keys[e.code] = false;
 });
 
-export { myplayer, platforms };
+export { myplayer, gameObjects };

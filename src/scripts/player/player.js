@@ -28,8 +28,6 @@ class Player extends GameObject {
 
     handleSpeed(interval) {
         this.velocity.x *= this.grounded ? this.friction : this.airFriction
-
-        if (Math.abs(this.velocity.x) < 0.1) this.velocity.x = 0; // Stop when speed is very low
     }
 
     handleMovement(interval) {

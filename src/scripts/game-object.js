@@ -17,9 +17,13 @@ class GameObject {
         if (this.hasGravity) {
             this.grounded = false;
             this.handleGravity(interval);
-            this.x += this.velocity.x * interval;
+            this.x += (Math.abs(this.velocity.x) < 0.1) ? 0 : this.velocity.x * interval;
             this.y += this.velocity.y * interval;
-            allGameObjects.forEach(object => object.handleCollision(this));
+            for (let i = 0; i < allGameObjects.length; i++) {
+                if (allGameObjects[i] !== this) {
+                    allGameObjects[i].handleCollision(this)
+                }
+            }
         }
 
         this.draw();
