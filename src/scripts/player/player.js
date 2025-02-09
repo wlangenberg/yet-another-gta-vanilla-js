@@ -1,20 +1,16 @@
-import { canvas, ctx, gravity, keys } from '/constants.js';
+import { GameObject } from '../game-object.js'
+import { Collider } from '../collider.js';
+import { gravity, keys } from '../../../constants.js';
 
-class Player {
-    constructor(x, y, width, height, color) {
+class Player extends GameObject {
+    constructor(x, y, width, height, color, ctx) {
+        super(x, y, width, height, color, ctx);
         this.id = Math.floor(Math.random() * (2 ** 31));
         this.name = "Player" + this.id;
-        this.x = x;
-        this.y = y;
-        this.width = width;
-        this.height = height;
-        this.color = color;
-        this.dy = 0;
-        this.jumpForce = 3;
+        this.jumpForce = 0.25;
         this.maxSpeed = 25;
         this.friction = 0.75;
-        this.airFriction = 0.75;
-        this.speed = 0;
+        this.airFriction = 0.85;
         this.baseAcceleration = 0.003; // Base acceleration rate
         this.maxAcceleration = 0.5;
         this.direction = 0;
@@ -25,50 +21,28 @@ class Player {
         this.jumpMomentum = 0; // Horizontal momentum during jumps
     }
 
-    animate(interval, platforms) {
-        this.handleGravity(interval);
+    update(interval, platforms) {
         this.handleSpeed(interval);
-        this.groundedCheck(platforms);
-        this.move(interval);
-        this.draw();
+        this.handleMovement(interval);
+        this.handleGravity(interval, platforms);
+        super.update(interval);
     }
 
     handleSpeed(interval) {
-        if (this.grounded) {
-            this.speed *= this.friction;
-        } else {
-            this.speed *= this.airFriction; // Slightly reduced friction in the air
-        }
+        this.velocity.x *= this.grounded ? this.friction : this.airFriction
+
         
-        if (Math.abs(this.speed) < 0.1) this.speed = 0; // Stop when speed is very low
-        this.x += this.speed * interval;
+        if (Math.abs(this.velocity.x) < 0.1) this.velocity.x = 0; // Stop when speed is very low
     }
 
-    handleGravity(interval) {
-        this.dy += gravity * interval;
-        this.y += this.dy;
-    }
-
-    groundedCheck(platforms) {
-        // Reset grounded state before checking collisions
-        this.grounded = false;
-        if (platforms) {
-            platforms.forEach(platform => platform.handleCollision(this));
-        }
-    }
-
-    draw() {
-        ctx.fillStyle = this.color;
-        ctx.fillRect(this.x, this.y, this.width, this.height);
-    }
-
-    move(interval) {
+    handleMovement(interval) {
         const accelerationFactor = this.grounded ? 1 : 0.9; // Reduce acceleration in the air
 
         if (keys['ArrowUp'] && this.grounded) {
-            this.dy = -(this.jumpForce * interval);
+            this.velocity.y = -(this.jumpForce * interval);
             this.grounded = false;
-            this.jumpMomentum = this.speed; // Capture horizontal momentum at jump
+            // this.velocity.x += this.jumpMomentum
+            // this.jumpMomentum = this.velocity.x; // Capture horizontal momentum at jump
         }
 
         const now = performance.now();
@@ -100,15 +74,24 @@ class Player {
 
         const acceleration = Math.min(this.maxAcceleration, accelerationFactor * accelerationIncrease);
         if (this.direction === 1) {
-            this.speed += acceleration;
-            if (this.speed > this.maxSpeed) this.speed = this.maxSpeed;
+            this.velocity.x += acceleration;
+            if (this.velocity.x > this.maxSpeed) this.velocity.x = this.maxSpeed;
         } else if (this.direction === -1) {
-            this.speed -= acceleration;
-            if (this.speed < -this.maxSpeed) this.speed = -this.maxSpeed;
+            this.velocity.x -= acceleration;
+            if (this.velocity.x < -this.maxSpeed) this.velocity.x = -this.maxSpeed;
         }
+    }
 
-        if (!this.grounded) {
-            this.x += this.jumpMomentum * interval;
+    handleGravity(interval, platforms) {
+        this.velocity.y += gravity * interval;
+
+        let collision = Collider.raycastCollision(this, platforms, this.velocity);
+        if (collision) {
+            this.y = collision.y - this.height; // Place player on top of platform
+            this.velocity.y = 0;
+            this.grounded = true;
+        } else {
+            this.grounded = false;
         }
     }
 }

@@ -3,6 +3,8 @@ import { Platform } from './src/scripts/assets/platform/platform.js';
 import { keys, ctx, canvas } from './constants.js';
 import Camera from './src/scripts/camera/camera.js';
 
+const platforms = []
+
 const WORLD_WIDTH = 1024;
 const WORLD_HEIGHT = 768;
 
@@ -73,29 +75,17 @@ let updatePlayerState = (playerData) => {
     }
 }
 
-const myplayer = new Player(WORLD_WIDTH / 2, WORLD_HEIGHT - 50, 50, 50, 'white');
-const platforms = [
-    new Platform(-WORLD_WIDTH, WORLD_HEIGHT - 100, WORLD_WIDTH * 8, 400, 'blue'), // Ground platform
-    new Platform(200, 500, 200, 50, 'red'),
-    new Platform(500, 600, 150, 20, 'red'),
-    new Platform(100, 400, 150, 20, 'red'),
-    new Platform(-200, 300, 350, 20, 'red'),
-    new Platform(-300, 200, 350, 20, 'red'),
-    new Platform(-500, 50, 350, 20, 'red'),
-    new Platform(-600, -100, 350, 20, 'red'),
-    new Platform(-700, -200, 350, 20, 'red'),
-    new Platform(800, 400, 200, 20, 'orange'),
-    new Platform(1500, 400, 100, 20, 'yellow'),
-    new Platform(1800, 400, 100, 20, 'yellow'),
-    new Platform(2500, 400, 100, 20, 'yellow'),
-    new Platform(2800, 400, 100, 20, 'yellow'),
-    new Platform(3500, 400, 100, 20, 'yellow'),
-    new Platform(4000, 400, 100, 20, 'yellow'),
-    new Platform(5000, 400, 100, 20, 'yellow'),
-    new Platform(6000, 400, 100, 20, 'yellow'),
-    new Platform(7000, 400, 100, 20, 'yellow'),
-    new Platform(8000, 400, 100, 20, 'yellow'),
-];
+const myplayer = new Player(WORLD_WIDTH / 2, WORLD_HEIGHT - 50, 50, 50, 'white', ctx);
+
+fetch('level.json')
+    .then(response => response.json())
+    .then(levelData => {
+        platforms.length = 0
+        levelData.rectangles.forEach(rect => {
+            platforms.push(new Platform(rect.x, rect.y, rect.width, rect.height, 'red', false, ctx))
+        });
+    })
+    .catch(error => console.error('Error loading level:', error));
 
 const camera = new Camera(myplayer, canvas, { worldHeight: WORLD_HEIGHT, smoothness: 0.1, minZoom: 1, maxZoom: 2, zoom: 1, latency: 0.1 });
 
@@ -126,14 +116,14 @@ const tick = (timestamp) => {
         ctx.translate(transform.x, transform.y);
         ctx.scale(transform.scale, transform.scale);
 
-        myplayer.animate(interval, platforms);
+        myplayer.update(interval, platforms);
         platforms.forEach(platform => platform.draw());
 
         for (let i = 0; i < players.length; i++) {
             players[i].draw();
         }
 
-        if (myplayer.speed > 0) {
+        if (myplayer.velocity.x !== 0 || myplayer.velocity.y !== 0) {
             updatePlayerState(myplayer);
         }
 
