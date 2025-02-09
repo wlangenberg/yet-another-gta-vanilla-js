@@ -37,9 +37,9 @@ class Camera {
       this.targetY = this.defaultY - this.canvas.height;
     }
 
-    // Smoothly interpolate to target position
-    this.x += (this.targetX - this.x) * this.smoothness;
-    this.y += (this.targetY - this.y) * this.smoothness;
+    const easeOutCubic = (t) => t * t * (2 - t);
+    this.x += (this.targetX - this.x) * easeOutCubic(this.smoothness);
+    this.y += (this.targetY - this.y) * easeOutCubic(this.smoothness);
   }
 
   setZoom(zoom) {
