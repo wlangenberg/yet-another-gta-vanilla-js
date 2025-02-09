@@ -75,7 +75,7 @@ let updatePlayerState = (playerData) => {
 
 const myplayer = new Player(WORLD_WIDTH / 2, WORLD_HEIGHT - 50, 50, 50, 'white');
 const platforms = [
-    new Platform(0, WORLD_HEIGHT - 100, WORLD_WIDTH, 100, 'blue'), // Ground platform
+    new Platform(-WORLD_WIDTH, WORLD_HEIGHT - 100, WORLD_WIDTH * 8, 400, 'blue'), // Ground platform
     new Platform(200, 500, 200, 50, 'red'),
     new Platform(500, 600, 150, 20, 'red'),
     new Platform(100, 400, 150, 20, 'red'),
@@ -84,7 +84,17 @@ const platforms = [
     new Platform(-500, 50, 350, 20, 'red'),
     new Platform(-600, -100, 350, 20, 'red'),
     new Platform(-700, -200, 350, 20, 'red'),
-    new Platform(800, 400, 100, 20, 'yellow')
+    new Platform(800, 400, 200, 20, 'orange'),
+    new Platform(1500, 400, 100, 20, 'yellow'),
+    new Platform(1800, 400, 100, 20, 'yellow'),
+    new Platform(2500, 400, 100, 20, 'yellow'),
+    new Platform(2800, 400, 100, 20, 'yellow'),
+    new Platform(3500, 400, 100, 20, 'yellow'),
+    new Platform(4000, 400, 100, 20, 'yellow'),
+    new Platform(5000, 400, 100, 20, 'yellow'),
+    new Platform(6000, 400, 100, 20, 'yellow'),
+    new Platform(7000, 400, 100, 20, 'yellow'),
+    new Platform(8000, 400, 100, 20, 'yellow'),
 ];
 
 const camera = new Camera(myplayer, canvas, { worldHeight: WORLD_HEIGHT, smoothness: 0.1, minZoom: 1, maxZoom: 2, zoom: 1, latency: 0.1 });
@@ -117,7 +127,6 @@ const tick = (timestamp) => {
         ctx.scale(transform.scale, transform.scale);
 
         myplayer.animate(interval, platforms);
-        myplayer.move(interval);
         platforms.forEach(platform => platform.draw());
 
         for (let i = 0; i < players.length; i++) {

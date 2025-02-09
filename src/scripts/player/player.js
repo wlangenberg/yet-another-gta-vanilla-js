@@ -13,15 +13,16 @@ class Player {
         this.jumpForce = 3;
         this.maxSpeed = 25;
         this.friction = 0.75;
+        this.airFriction = 0.75;
         this.speed = 0;
-        this.baseAcceleration = 0.002; // Base acceleration rate
-        this.airFriction = 0.90;
+        this.baseAcceleration = 0.003; // Base acceleration rate
+        this.maxAcceleration = 0.5;
         this.direction = 0;
         this.grounded = false;
         this.runTime = 0; // Track the time running in one direction
         this.movingStartTime = null; // Track when movement starts
-        this.initialBoostDuration = 10; // Duration of initial speed boost (in milliseconds)
-        this.initialBoostFactor = 0.1; // Factor by which to multiply acceleration during initial boost
+        this.initialBoostFactor = 0.15; // Factor by which to multiply acceleration during initial boost
+        this.jumpMomentum = 0; // Horizontal momentum during jumps
     }
 
     animate(interval, platforms) {
@@ -62,11 +63,12 @@ class Player {
     }
 
     move(interval) {
-        const accelerationFactor = this.grounded ? 1 : 0.5; // Reduce acceleration in the air
+        const accelerationFactor = this.grounded ? 1 : 0.9; // Reduce acceleration in the air
 
         if (keys['ArrowUp'] && this.grounded) {
             this.dy = -(this.jumpForce * interval);
             this.grounded = false;
+            this.jumpMomentum = this.speed; // Capture horizontal momentum at jump
         }
 
         const now = performance.now();
@@ -90,20 +92,23 @@ class Player {
             this.movingStartTime = null; // Clear moving start time
         }
 
-        let accelerationIncrease = this.baseAcceleration * (1 + this.runTime / 50); // Gradually increase acceleration with run time
+        let accelerationIncrease = this.baseAcceleration * (1 + this.runTime / 7); // Gradually increase acceleration with run time
 
         if (this.movingStartTime !== null) {
             accelerationIncrease += this.initialBoostFactor; // Apply initial speed boost
         }
 
-        const acceleration = accelerationFactor * accelerationIncrease;
-
+        const acceleration = Math.min(this.maxAcceleration, accelerationFactor * accelerationIncrease);
         if (this.direction === 1) {
             this.speed += acceleration;
             if (this.speed > this.maxSpeed) this.speed = this.maxSpeed;
         } else if (this.direction === -1) {
             this.speed -= acceleration;
             if (this.speed < -this.maxSpeed) this.speed = -this.maxSpeed;
+        }
+
+        if (!this.grounded) {
+            this.x += this.jumpMomentum * interval;
         }
     }
 }
