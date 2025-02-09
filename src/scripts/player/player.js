@@ -1,10 +1,9 @@
 import { GameObject } from '../game-object.js'
-import { Collider } from '../collider.js';
 import { gravity, keys } from '../../../constants.js';
 
 class Player extends GameObject {
-    constructor(x, y, width, height, color, ctx) {
-        super(x, y, width, height, color, ctx);
+    constructor(x, y, width, height, color, ctx, hasGravity) {
+        super(x, y, width, height, color, ctx, hasGravity);
         this.id = Math.floor(Math.random() * (2 ** 31));
         this.name = "Player" + this.id;
         this.jumpForce = 0.25;
@@ -24,14 +23,12 @@ class Player extends GameObject {
     update(interval, platforms) {
         this.handleSpeed(interval);
         this.handleMovement(interval);
-        this.handleGravity(interval, platforms);
-        super.update(interval);
+        super.update(interval, platforms);
     }
 
     handleSpeed(interval) {
         this.velocity.x *= this.grounded ? this.friction : this.airFriction
 
-        
         if (Math.abs(this.velocity.x) < 0.1) this.velocity.x = 0; // Stop when speed is very low
     }
 
@@ -79,19 +76,6 @@ class Player extends GameObject {
         } else if (this.direction === -1) {
             this.velocity.x -= acceleration;
             if (this.velocity.x < -this.maxSpeed) this.velocity.x = -this.maxSpeed;
-        }
-    }
-
-    handleGravity(interval, platforms) {
-        this.velocity.y += gravity * interval;
-
-        let collision = Collider.raycastCollision(this, platforms, this.velocity);
-        if (collision) {
-            this.y = collision.y - this.height; // Place player on top of platform
-            this.velocity.y = 0;
-            this.grounded = true;
-        } else {
-            this.grounded = false;
         }
     }
 }

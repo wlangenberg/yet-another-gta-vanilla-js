@@ -75,21 +75,19 @@ let updatePlayerState = (playerData) => {
     }
 }
 
-const myplayer = new Player(WORLD_WIDTH / 2, WORLD_HEIGHT - 50, 50, 50, 'white', ctx);
+const myplayer = new Player(WORLD_WIDTH / 2, WORLD_HEIGHT - 50, 50, 50, 'white', ctx, true);
 
 fetch('level.json')
     .then(response => response.json())
     .then(levelData => {
         platforms.length = 0
         levelData.rectangles.forEach(rect => {
-            platforms.push(new Platform(rect.x, rect.y, rect.width, rect.height, 'red', false, ctx))
+            platforms.push(new Platform(rect.x, rect.y, rect.width, rect.height, 'red', ctx, false, ))
         });
     })
     .catch(error => console.error('Error loading level:', error));
 
 const camera = new Camera(myplayer, canvas, { worldHeight: WORLD_HEIGHT, smoothness: 0.1, minZoom: 1, maxZoom: 2, zoom: 1, latency: 0.1 });
-
-myplayer.draw();
 
 const resizeCanvas = () => {
     canvas.width = window.innerWidth;
@@ -117,10 +115,10 @@ const tick = (timestamp) => {
         ctx.scale(transform.scale, transform.scale);
 
         myplayer.update(interval, platforms);
-        platforms.forEach(platform => platform.draw());
+        platforms.forEach(platform => platform.update(interval));
 
         for (let i = 0; i < players.length; i++) {
-            players[i].draw();
+            players[i].update(interval, platforms);
         }
 
         if (myplayer.velocity.x !== 0 || myplayer.velocity.y !== 0) {
