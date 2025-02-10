@@ -156,7 +156,11 @@ class GameObject {
 
     draw() {
         this.ctx.fillStyle = this.color;
-        this.ctx.fillRect(this.x, this.y, this.width, this.height);
+        // Just for test right now, might change later, this could be good to use on ground etc later... on players/enemies it might be weird
+        const BUFFER = 0.5;
+        this.ctx.fillRect(this.x - BUFFER, this.y - BUFFER, this.width + BUFFER * 2, this.height + BUFFER * 2);
+        // this.ctx.fillRect(this.x, this.y, this.width, this.height); // Old draw
+        
     }
 }
 
