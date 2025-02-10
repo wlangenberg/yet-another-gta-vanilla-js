@@ -10,7 +10,7 @@ class GameObject {
         this.velocity = { x: 0, y: 0 };
         this.ctx = ctx;
         this.hasGravity = hasGravity;
-        this.collisionPadding = 0; // Reduce collision sensitivity
+        this.stepHeight = this.height / 4; // Maximum step-up height
     }
 
     update(interval, allGameObjects = []) {
@@ -19,9 +19,10 @@ class GameObject {
             this.handleGravity(interval);
             this.x += (Math.abs(this.velocity.x) < 0.1) ? 0 : this.velocity.x * interval;
             this.y += this.velocity.y * interval;
+            
             for (let i = 0; i < allGameObjects.length; i++) {
                 if (allGameObjects[i] !== this) {
-                    allGameObjects[i].handleCollision(this)
+                    allGameObjects[i].handleCollision(this);
                 }
             }
         }
@@ -42,31 +43,38 @@ class GameObject {
 
     handleCollision(movableObject) {
         if (this.checkCollision(movableObject)) {
-            const bottomOverlap = movableObject.y + movableObject.height - this.y; // How deep into the floor
-            const topOverlap = this.y + this.height - movableObject.y; // How deep into the ceiling
+            const bottomOverlap = movableObject.y + movableObject.height - this.y;
+            const topOverlap = this.y + this.height - movableObject.y;
 
-            // Movable object is touching it's feet on THIS top side
             if (movableObject.velocity.y > 0 && bottomOverlap > 0 && bottomOverlap < movableObject.height * 0.5) {
                 movableObject.y = this.y - movableObject.height;
                 movableObject.velocity.y = 0;
                 movableObject.grounded = true;
-            }
-            // Movable object is touching it's head on THIS bottom side
+            } 
             else if (movableObject.velocity.y < 0 && topOverlap > 0 && topOverlap < movableObject.height * 0.5) {
                 movableObject.y = this.y + this.height;
                 movableObject.velocity.y = 0;
-            }
-            // Movable object collides with THIS sides
+            } 
             else {
-                const middleX = this.x + this.width / 2; // Calculate the middle point of this object
-                if ( movableObject.x + movableObject.width / 2 < middleX) {
+                const middleX = this.x + this.width / 2;
+                if (movableObject.x + movableObject.width / 2 < middleX) {
                     // Movable object is on the left side
-                    movableObject.x = this.x - movableObject.width;
-                } else  {
+                    if (movableObject.height - (this.y - movableObject.y) <= movableObject.stepHeight) {
+                        // movableObject.y = this.y - movableObject.height; // Step up
+                        movableObject.y = this.y - movableObject.height; // Step up
+                    } else {
+                        movableObject.x = this.x - movableObject.width; // Stop movement
+                        movableObject.velocity.x = 0;
+                    }
+                } else {
                     // Movable object is on the right side
-                    movableObject.x = this.x + this.width;
+                    if (movableObject.height - (this.y - movableObject.y) <= movableObject.stepHeight) {
+                        movableObject.y = this.y - movableObject.height; // Step up
+                    } else {
+                        movableObject.x = this.x + this.width; // Stop movement
+                        movableObject.velocity.x = 0;
+                    }
                 }
-                movableObject.velocity.x = 0;
             }
         }
     }

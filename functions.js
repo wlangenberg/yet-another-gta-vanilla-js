@@ -76,7 +76,7 @@ fetch('level.json')
     })
     .catch(error => console.error('Error loading level:', error));
 
-const camera = new Camera(myplayer, canvas, { worldHeight: WORLD_HEIGHT, smoothness: 0.1, minZoom: 1, maxZoom: 2, zoom: 1, latency: 0.1 });
+const camera = new Camera(myplayer, canvas, { worldHeight: WORLD_HEIGHT, smoothness: 0.02, minZoom: 1, maxZoom: 2, zoom: 1, latency: 0.1 });
 
 const resizeCanvas = () => {
     canvas.width = window.innerWidth;

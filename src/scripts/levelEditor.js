@@ -2,7 +2,7 @@
 function renderGrid() {
   const canvas = document.getElementById('gameCanvas');
   const ctx = canvas.getContext('2d');
-  const gridSize = 32;
+  const gridSize = 12;
   const width = canvas.width;
   const height = canvas.height;
 
@@ -65,7 +65,7 @@ function saveLevel() {
 function drawRectangle(x, y) {
   const canvas = document.getElementById('gameCanvas');
   const ctx = canvas.getContext('2d');
-  const gridSize = 32;
+  const gridSize = 12;
 
   const rectX = Math.floor(x / gridSize) * gridSize;
   const rectY = Math.floor(y / gridSize) * gridSize;
