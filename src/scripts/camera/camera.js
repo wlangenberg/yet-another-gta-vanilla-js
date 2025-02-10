@@ -8,17 +8,16 @@ class Camera {
       this.minZoom = options.minZoom || 1;
       this.maxZoom = options.maxZoom || 2;
       this.zoom = options.zoom || 1;
-
-      // Camera position
-      this.x = 0;
-      this.y = options.worldHeight;
-      this.targetX = 0;
-      this.targetY = this.y;
-
+ 
       // Viewport dimensions
       this.viewportWidth = canvas.width / this.zoom;
       this.viewportHeight = canvas.height / this.zoom;
-
+      // Camera position
+      this.x = options.x - this.viewportWidth / 2;
+      this.y = options.y - this.viewportHeight / 2;
+      this.targetX = 0;
+      this.targetY = this.y;
+      
       // Thresholds
       this.lowerThresholdY = this.viewportHeight * (5 / 6);  // Bottom 5/6 of the screen
       this.upperThresholdY = this.viewportHeight * (1 / 6);  // Top 1/6 of the screen

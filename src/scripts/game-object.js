@@ -116,7 +116,7 @@ class GameObject {
         const bottomOverlap = movableObject.y + movableObject.height - this.y;
         const topOverlap = this.y + this.height - movableObject.y;
 
-        if (movableObject.velocity.y > 0 && bottomOverlap > 0 && bottomOverlap < movableObject.height * 0.5) {
+        if (movableObject.velocity.y > 0 && bottomOverlap > 0 && bottomOverlap < movableObject.height) {
             movableObject.y = this.y - movableObject.height;
             movableObject.velocity.y = 0;
             movableObject.grounded = true;
@@ -134,6 +134,9 @@ class GameObject {
                     movableObject.velocity.y -= 0.005; // Step up
                 } else {
                     movableObject.x = this.x - movableObject.width; // Stop movement
+                    if (this.hasGravity) {
+                        this.velocity.x += movableObject.velocity.x;
+                    }
                     movableObject.velocity.x = 0;
                 }
             } else {
@@ -142,6 +145,9 @@ class GameObject {
                     movableObject.velocity.y -= 0.005; // Step up
                 } else {
                     movableObject.x = this.x + this.width; // Stop movement
+                    if (this.hasGravity) {
+                        this.velocity.x += movableObject.velocity.x;
+                    }
                     movableObject.velocity.x = 0;
                 }
             }
