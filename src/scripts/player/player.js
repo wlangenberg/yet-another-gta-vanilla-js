@@ -20,10 +20,10 @@ class Player extends GameObject {
         this.jumpMomentum = 0; // Horizontal momentum during jumps
     }
 
-    update(interval, platforms) {
+    update(interval, platforms, spatialGrid) {
         this.handleSpeed(interval);
         this.handleMovement(interval);
-        super.update(interval, platforms);
+        super.update(interval, platforms, spatialGrid);
     }
 
     handleSpeed(interval) {

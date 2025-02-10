@@ -1,4 +1,5 @@
 import { Player } from './src/scripts/player/player.js';
+import { SpatialGrid  } from './src/scripts/game-object.js'
 import { Platform } from './src/scripts/assets/platform/platform.js';
 import { keys, ctx, canvas } from './constants.js';
 import Camera from './src/scripts/camera/camera.js';
@@ -70,7 +71,8 @@ fetch('level.json')
     .then(response => response.json())
     .then(levelData => {
         levelData.rectangles.forEach(rect => {
-            gameObjects.push(new Platform(rect.x, rect.y, rect.width, rect.height, 'red', ctx, false, ))
+            const gravity = rect.y < 400 ? true : false
+            gameObjects.push(new Platform(rect.x, rect.y, rect.width, rect.height, 'red', ctx, gravity, ))
         });
         gameObjects.push(myplayer)
     })
@@ -91,6 +93,8 @@ const fps = 144;
 const interval = 1000 / fps;
 let lastTime = 0;
 
+
+const spatialGrid = new SpatialGrid(100)
 const tick = (timestamp) => {
     if (timestamp - lastTime >= interval) {
         lastTime = timestamp;
@@ -102,9 +106,12 @@ const tick = (timestamp) => {
         ctx.save();
         ctx.translate(transform.x, transform.y);
         ctx.scale(transform.scale, transform.scale);
+        spatialGrid.clear();
+        gameObjects.forEach(obj => spatialGrid.insert(obj));
 
+        
         for (let i = 0; i < gameObjects.length; i++) {
-            gameObjects[i].update(interval, gameObjects)
+            gameObjects[i].update(interval, gameObjects, spatialGrid)
         }
 
         updatePlayerState(myplayer);

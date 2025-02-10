@@ -6,8 +6,8 @@ class Platform extends GameObject {
         this.hasGravity = hasGravity;
     }
 
-    update(interval, platforms) {
-        super.update(interval);
+    update(interval, platforms, spatialGrid) {
+        super.update(interval, this.hasGravity ? platforms : [], spatialGrid);
     }
 }
 
