@@ -1,92 +1,125 @@
 // Global variables
 let gridSize = 12;
 let paintToolSize = 12;
-let zoomLevel = 1; // Default zoom level
+let zoomLevel = 1;
+let showGrid = true;
+let gridColor = "#cccccc";
+let backgroundColor = "#ffffff";
+
 let ctx, gridCtx;
 const rectangles = [];
+const playerSpawns = [];
+
 let isDrawing = false;
 let isErasing = false;
 let isPanning = false;
 let cameraX = 0, cameraY = 0;
 let lastMouseX = 0, lastMouseY = 0;
 
-
 class PaintTool {
-  constructor(id, name, color) {
-      this.id = id;
-      this.name = name;
-      this.color = color;
-  }
+    constructor(id, name, color) {
+        this.id = id;
+        this.name = name;
+        this.color = color;
+    }
 
-  draw(ctx, x, y, size) {
-      console.warn("Draw method should be implemented in subclasses.");
-  }
+    draw(ctx, x, y, size) {
+        console.warn("Draw method should be implemented in subclasses.");
+    }
 }
-
-class PlayerSpawnTool extends PaintTool {
-  constructor() {
-      super("player_spawn", "Player Spawn", "green");
-  }
-
-  draw(ctx, x, y, size) {
-      ctx.fillStyle = this.color;
-      ctx.beginPath();
-      ctx.arc(x + size / 2, y + size / 2, size / 3, 0, Math.PI * 2);
-      ctx.fill();
-  }
-}
-
 
 class RectangleTool extends PaintTool {
-  constructor() {
-      super("rectangle", "Rectangle", "blue");
-  }
+    constructor() {
+        super("rectangle", "Rectangle", "blue");
+    }
 
-  draw(ctx, x, y, size) {
-      ctx.fillStyle = this.color;
-      ctx.fillRect(x, y, size, size);
-  }
+    draw(ctx, x, y, size) {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(x, y, size, size);
+    }
+}
+
+class GrassTool extends PaintTool {
+    constructor() {
+        super("grass", "Grass", "green");
+    }
+
+    draw(ctx, x, y, size) {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(x, y, size, size);
+    }
+}
+
+class DirtTool extends PaintTool {
+    constructor() {
+        super("dirt", "Dirt", "sandybrown");
+    }
+
+    draw(ctx, x, y, size) {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(x, y, size, size);
+    }
+}
+class StoneTool extends PaintTool {
+    constructor() {
+        super("stone", "Stone", "grey");
+    }
+
+    draw(ctx, x, y, size) {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(x, y, size, size);
+    }
 }
 
 class CircleTool extends PaintTool {
-  constructor() {
-      super("circle", "Circle", "red");
-  }
+    constructor() {
+        super("circle", "Circle", "red");
+    }
 
-  draw(ctx, x, y, size) {
-      ctx.fillStyle = this.color;
-      ctx.beginPath();
-      ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
-      ctx.fill();
-  }
+    draw(ctx, x, y, size) {
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
+        ctx.fill();
+    }
 }
 
-const tools = [new RectangleTool(), new CircleTool(), new PlayerSpawnTool()];
-const playerSpawns = [];
+class PlayerSpawnTool extends PaintTool {
+    constructor() {
+        super("player_spawn", "Player Spawn", "green");
+    }
 
-let selectedTool = tools[0]; // Default selection
+    draw(ctx, x, y, size) {
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(x + size / 2, y + size / 2, size / 3, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+const tools = [new RectangleTool(), new CircleTool(), new PlayerSpawnTool(), new GrassTool(), new DirtTool(), new StoneTool()];
+let selectedTool = tools[0];
 
 function populateToolList() {
-  const toolList = document.getElementById("tool-list");
-  toolList.innerHTML = "";
+    const toolList = document.getElementById("tool-list");
+    toolList.innerHTML = "";
 
-  tools.forEach((tool) => {
-      const div = document.createElement("div");
-      div.classList.add("tool-item");
-      div.textContent = tool.name;
-      div.style.background = tool.color;
-      div.addEventListener("click", () => {
-          selectedTool = tool;
-      });
-      toolList.appendChild(div);
-  });
+    tools.forEach((tool) => {
+        const div = document.createElement("div");
+        div.classList.add("tool-item");
+        div.textContent = tool.name;
+        div.style.background = tool.color;
+        div.addEventListener("click", () => {
+            selectedTool = tool;
+        });
+        toolList.appendChild(div);
+
+    });
 }
 
 document.getElementById("open-tool-panel").addEventListener("click", () => {
-  document.getElementById("tool-panel").classList.toggle("hidden");
+    document.getElementById("tool-panel").classList.toggle("hidden");
 });
-
-populateToolList();
 
 function initCanvas() {
     const gridCanvas = document.getElementById('gridCanvas');
@@ -102,7 +135,7 @@ function initCanvas() {
     redrawCanvas();
 }
 
-// Function to apply zoom
+// Apply zoom
 function applyZoom() {
     ctx.setTransform(zoomLevel, 0, 0, zoomLevel, -cameraX * zoomLevel, -cameraY * zoomLevel);
     gridCtx.setTransform(zoomLevel, 0, 0, zoomLevel, -cameraX * zoomLevel, -cameraY * zoomLevel);
@@ -111,14 +144,15 @@ function applyZoom() {
     redrawCanvas();
 }
 
-// Function to draw the grid (ONLY on gridCanvas)
+// Draw grid
 function drawGrid() {
-    gridCtx.resetTransform(); // Reset to default before drawing
+    gridCtx.resetTransform();
     gridCtx.clearRect(0, 0, gridCtx.canvas.width, gridCtx.canvas.height);
-    gridCtx.strokeStyle = '#A9A9A9';
-    gridCtx.lineWidth = 1;
-    gridCtx.globalAlpha = 1;
 
+    if (!showGrid) return;
+
+    gridCtx.strokeStyle = gridColor;
+    gridCtx.lineWidth = 1;
     gridCtx.beginPath();
 
     for (let x = -cameraX % gridSize; x < gridCtx.canvas.width; x += gridSize) {
@@ -225,8 +259,8 @@ function drawRectangle(event) {
 function removeRectangle(event) {
   const gameCanvas = document.getElementById('gameCanvas');
   const rect = gameCanvas.getBoundingClientRect();
-  const x = event.clientX - rect.left + cameraX;
-  const y = event.clientY - rect.top + cameraY;
+  const x = (event.clientX - rect.left) / zoomLevel + cameraX;
+  const y = (event.clientY - rect.top) / zoomLevel + cameraY;
 
   const rectX = Math.floor(x / paintToolSize) * paintToolSize;
   const rectY = Math.floor(y / paintToolSize) * paintToolSize;
@@ -239,80 +273,89 @@ function removeRectangle(event) {
       redrawCanvas(); // Redraw all rectangles
   }
 }
-
-
-
 function redrawCanvas() {
-  ctx.resetTransform();
-  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.resetTransform();
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
-  ctx.setTransform(zoomLevel, 0, 0, zoomLevel, -cameraX * zoomLevel, -cameraY * zoomLevel);
+    ctx.setTransform(zoomLevel, 0, 0, zoomLevel, -cameraX * zoomLevel, -cameraY * zoomLevel);
 
-  rectangles.forEach(rect => {
-      ctx.fillStyle = rect.color;
-      ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
-  });
+    rectangles.forEach(rect => {
+        ctx.fillStyle = rect.color;
+        ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+    });
 
-  playerSpawns.forEach(spawn => {
-      ctx.fillStyle = "green";
-      ctx.beginPath();
-      ctx.arc(spawn.x + paintToolSize / 2, spawn.y + paintToolSize / 2, paintToolSize / 3, 0, Math.PI * 2);
-      ctx.fill();
-  });
+    playerSpawns.forEach(spawn => {
+        ctx.fillStyle = "green";
+        ctx.beginPath();
+        ctx.arc(spawn.x + paintToolSize / 2, spawn.y + paintToolSize / 2, paintToolSize / 3, 0, Math.PI * 2);
+        ctx.fill();
+    });
 }
-
 function saveLevel() {
-  const levelData = {
-      gridSize,
-      paintToolSize,
-      rectangles: rectangles.map(r => ({
-          x: r.x,
-          y: r.y,
-          width: r.width,
-          height: r.height,
-          color: r.color,
-          type: r.type
-      })),
-      playerSpawns: playerSpawns.map(spawn => ({ x: spawn.x, y: spawn.y }))
-  };
-
-  const jsonString = JSON.stringify(levelData, null, 2);
-  const blob = new Blob([jsonString], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'level.json';
-  a.click();
-  URL.revokeObjectURL(url);
-}
+    const levelData = {
+        gridSize,
+        paintToolSize,
+        playerSpawns: playerSpawns.map(spawn => ({ x: spawn.x, y: spawn.y })),
+        backgroundColor: backgroundColor,
+        rectangles: rectangles.map(r => ({
+            x: r.x,
+            y: r.y,
+            width: r.width,
+            height: r.height,
+            color: r.color,
+            type: r.type
+        })),
+    };
+  
+    const jsonString = JSON.stringify(levelData, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'level.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
 function initToolbar() {
-  document.getElementById('paint-tool-size').addEventListener('change', (event) => {
-      paintToolSize = parseInt(event.target.value);
-  });
+    document.getElementById('paint-tool-size').addEventListener('change', (event) => {
+        paintToolSize = parseInt(event.target.value);
+    });
 
-  document.getElementById('grid-size').addEventListener('change', (event) => {
-      gridSize = parseInt(event.target.value);
-      drawGrid();
-  });
+    document.getElementById('grid-size').addEventListener('change', (event) => {
+        gridSize = parseInt(event.target.value);
+        drawGrid();
+    });
 
-  document.getElementById('grid-color').addEventListener('change', () => {
-      drawGrid();
-  });
+    document.getElementById('grid-color').addEventListener('change', (event) => {
+        gridColor = event.target.value;
+        drawGrid();
+    });
 
-  document.getElementById('save-level').addEventListener('click', saveLevel);
+    document.getElementById('background-color').addEventListener('change', (event) => {
+        backgroundColor = event.target.value;
+        redrawCanvas();
+    });
+
+    document.getElementById('toggle-grid').addEventListener('click', () => {
+        showGrid = !showGrid;
+        drawGrid();
+    });
+
+    document.getElementById('save-level').addEventListener('click', saveLevel);
 }
 
-// Initialize the level editor
+// Initialize level editor
 function initLevelEditor() {
     initCanvas();
     initToolbar();
+    populateToolList();
     handleUserInteractions();
     setupZoomControl();
 }
 
-// Resize canvases on window resize
 window.addEventListener('resize', initCanvas);
 
-// Start the editor
 initLevelEditor();

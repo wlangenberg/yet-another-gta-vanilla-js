@@ -112,6 +112,11 @@ body {
 }
 
 #tool-list {
-    display:flex;
-    gap: 10%
+    display: flex;
+    flex: auto;
+    row-gap: 0px;
+    /* max-width: 100%; */
+    flex-wrap: wrap;
+    flex-direction: row;
+    column-gap: 10%;
 }

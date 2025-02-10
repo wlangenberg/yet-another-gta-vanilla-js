@@ -100,7 +100,7 @@ const run = async () => {
             return new Camera(myplayer, canvas, { worldHeight: WORLD_HEIGHT, smoothness: 0.02, minZoom: 1, maxZoom: 2, zoom: 1, latency: 0.1 });
         }
     })()
-    
+    canvas.style.backgroundColor = levelData?.backgroundColor || '#ffffff';
     gameObjects.push(myplayer)
     
     const resizeCanvas = () => {
