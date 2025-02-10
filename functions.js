@@ -3,6 +3,7 @@ import { SpatialGrid  } from './src/scripts/game-object.js'
 import { Platform } from './src/scripts/assets/platform/platform.js';
 import { keys, ctx, canvas } from './constants.js';
 import Camera from './src/scripts/camera/camera.js';
+import toast from './src/scripts/toast.js'
 
 const gameObjects = []
 
@@ -10,15 +11,28 @@ const WORLD_WIDTH = 1024;
 const WORLD_HEIGHT = 768;
 
 let ws;
+let wsUrl = `wss://${location.hostname}/ws`;
 
 if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-    ws = new WebSocket(`ws://localhost:8081/ws`);
-} else {
-    ws = new WebSocket(`wss://${location.hostname}/ws`);
+    wsUrl = `ws://localhost:8081/ws`;
 }
+
+ws = new WebSocket(wsUrl);
 
 ws.onopen = () => {
     console.log('Connected to server');
+}
+
+// Implement ws reconnect
+ws.onclose = (_) => {
+    console.log('Connection closed, retrying after 5 seconds');
+    setTimeout(() => {
+        ws = new WebSocket(wsUrl);
+    }, 5000);
+}
+
+ws.onerror = (error) => {
+    console.error('Error:', error);
 }
 
 ws.onmessage = (message) => {
@@ -43,6 +57,8 @@ ws.onmessage = (message) => {
                     return;
                 }
             }
+        } else if (data.type === 'PlayerConnect') {
+            toast.show('New player connected!');
         } else {
             console.debug(`Unknown message type: ${data.type}`);
         }

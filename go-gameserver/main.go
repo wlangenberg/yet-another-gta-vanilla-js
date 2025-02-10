@@ -62,6 +62,9 @@ func handleConnection(w http.ResponseWriter, r *http.Request) {
 		conn.Close()
 	}()
 
+	broadcast <- Message{Type: "PlayerConnect"}
+	fmt.Println("New player connected:", conn.RemoteAddr())
+
 	// Send all existing players to the newly connected client
 	mu.Lock()
 	for _, player := range clients {
@@ -105,8 +108,6 @@ func handleConnection(w http.ResponseWriter, r *http.Request) {
 func handleMessages() {
 	for {
 		msg := <-broadcast
-		fmt.Println("Broadcasting:", msg)
-
 		mu.Lock()
 		for client := range clients {
 			err := client.WriteJSON(msg)
