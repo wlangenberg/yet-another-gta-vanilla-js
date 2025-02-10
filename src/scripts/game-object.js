@@ -61,7 +61,7 @@ class GameObject {
                     // Movable object is on the left side
                     if (movableObject.height - (this.y - movableObject.y) <= movableObject.stepHeight) {
                         // movableObject.y = this.y - movableObject.height; // Step up
-                        movableObject.y = this.y - movableObject.height; // Step up
+                        movableObject.velocity.y -= 0.005; // Step up
                     } else {
                         movableObject.x = this.x - movableObject.width; // Stop movement
                         movableObject.velocity.x = 0;
@@ -69,7 +69,7 @@ class GameObject {
                 } else {
                     // Movable object is on the right side
                     if (movableObject.height - (this.y - movableObject.y) <= movableObject.stepHeight) {
-                        movableObject.y = this.y - movableObject.height; // Step up
+                        movableObject.velocity.y -= 0.005; // Step up
                     } else {
                         movableObject.x = this.x + this.width; // Stop movement
                         movableObject.velocity.x = 0;
