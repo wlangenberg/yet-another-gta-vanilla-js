@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -104,20 +105,40 @@ func handleConnection(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Broadcast messages to all clients
 func handleMessages() {
-	for {
-		msg := <-broadcast
-		mu.Lock()
-		for client := range clients {
-			err := client.WriteJSON(msg)
-			if err != nil {
-				log.Println("Error writing message:", err)
-				client.Close()
-				delete(clients, client)
-			}
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	var messageCount int
+	var countMutex sync.Mutex // Mutex to protect messageCount
+
+	go func() {
+		for range ticker.C {
+			countMutex.Lock()
+			log.Printf("Messages sent per second: %d", messageCount)
+			messageCount = 0 // Reset the counter
+			countMutex.Unlock()
 		}
-		mu.Unlock()
+	}()
+
+	for {
+		select {
+		case msg := <-broadcast:
+			mu.Lock()
+			for client := range clients {
+				err := client.WriteJSON(msg)
+				if err != nil {
+					log.Println("Error writing message:", err)
+					client.Close()
+					delete(clients, client)
+				} else {
+					countMutex.Lock()
+					messageCount++ // Safely increment the counter
+					countMutex.Unlock()
+				}
+			}
+			mu.Unlock()
+		}
 	}
 }
 
@@ -126,7 +147,7 @@ func main() {
 	go handleMessages()
 
 	log.Println("Server started on :8081")
-	err := http.ListenAndServe(":8081", nil)
+	err := http.ListenAndServe("0.0.0.0:8081", nil)
 	if err != nil {
 		log.Fatal("ListenAndServe failed:", err)
 	}
