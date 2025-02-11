@@ -87,7 +87,7 @@ const run = async () => {
         .then(response => response.json())
         .catch(error => console.error('Error loading level:', error));
     levelData.rectangles.forEach(rect => {
-        const gravity = rect.y < 0 ? true : false
+        const gravity = rect.y < 600 ? true : false
         gameObjects.push(new Platform(rect.x, rect.y, rect.width, rect.height, rect.color, ctx, gravity, ))
     });
     const camera = (() => {
