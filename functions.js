@@ -1,5 +1,6 @@
 import { Player } from './src/scripts/player/player.js';
 import { SpatialGrid  } from './src/scripts/game-object.js'
+import { Sun  } from './src/scripts/sun.js'
 import { Platform } from './src/scripts/assets/platform/platform.js';
 import { keys, ctx, canvas } from './constants.js';
 import Camera from './src/scripts/camera/camera.js';
@@ -87,7 +88,7 @@ const run = async () => {
         .then(response => response.json())
         .catch(error => console.error('Error loading level:', error));
     levelData.rectangles.forEach(rect => {
-        const gravity = rect.y < 600 ? true : false
+        const gravity = rect.y < -1220 ? true : false
         gameObjects.push(new Platform(rect.x, rect.y, rect.width, rect.height, rect.color, ctx, gravity, ))
     });
     const camera = (() => {
@@ -102,6 +103,7 @@ const run = async () => {
     })()
     canvas.style.backgroundColor = levelData?.backgroundColor || '#ffffff';
     gameObjects.push(myplayer)
+    gameObjects.push(new Sun(WORLD_WIDTH / 2, -1200, 50, 50, ctx));
     
     const resizeCanvas = () => {
         canvas.width = window.innerWidth;
@@ -115,7 +117,6 @@ const run = async () => {
     const fps = 144;
     const interval = 1000 / fps;
     let lastTime = 0;
-    
     
     const spatialGrid = new SpatialGrid(100)
     const tick = (timestamp) => {
@@ -131,7 +132,6 @@ const run = async () => {
             ctx.scale(transform.scale, transform.scale);
             spatialGrid.clear();
             gameObjects.forEach(obj => spatialGrid.insert(obj));
-    
             
             for (let i = 0; i < gameObjects.length; i++) {
                 gameObjects[i].update(interval, gameObjects, spatialGrid)
@@ -154,7 +154,6 @@ const run = async () => {
         keys[e.code] = false;
     });
 }
-
 run()
 
 export { myplayer, gameObjects };

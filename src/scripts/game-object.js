@@ -54,7 +54,6 @@ class SpatialGrid {
     }
 }
 
-
 class GameObject {
     constructor(x, y, width, height, color, ctx, hasGravity) {
         this.x = x;
@@ -164,4 +163,5 @@ class GameObject {
     }
 }
 
-export { GameObject, SpatialGrid };
+
+export { SpatialGrid, GameObject}
