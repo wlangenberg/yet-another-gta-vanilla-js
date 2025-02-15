@@ -1,13 +1,11 @@
 import {BaseEntity} from "./BaseEntity.js"
 import { keys } from "../constants.js"
 class Player extends BaseEntity {
-	constructor(canvas, gl) {
+	constructor(canvas, gl, { x = 600, y = 400}) {
 		// Define player width and height
 		const width = 50
 		const height = 50
 		// Set the initial position (e.g., bottom center-ish of the canvas)
-		const x = 600
-		const y = 300
 		// Player color: blue
 		super(x, y, width, height, [0.0, 0.0, 1.0, 1.0], canvas)
 		
@@ -25,13 +23,14 @@ class Player extends BaseEntity {
         this.movingStartTime = null; // Track when movement starts
         this.initialBoostFactor = 20; // Factor by which to multiply acceleration during initial boost
         this.jumpMomentum = 0; // Horizontal momentum during jumps
+        this.hasGravity = true
 		this.init(gl)
 	}
 
-	update(deltaTime, allEntities) {
+	update(deltaTime, allEntities, spatialGrid) {
         this.handleFriction(deltaTime);
         this.handleMovement(deltaTime, allEntities);
-        super.update(deltaTime, allEntities)
+        super.update(deltaTime, allEntities, spatialGrid)
 	}
 
     handleFriction(interval) {
@@ -42,6 +41,7 @@ class Player extends BaseEntity {
         const accelerationFactor = this.grounded ? 1 : 0.9; // Reduce acceleration in the air
 
         if (keys['ArrowUp'] && this.grounded) {
+            console.log('this.jumpForce', this.jumpForce * interval, interval)
             this.velocity.y = -(this.jumpForce * interval);
             this.grounded = false;
         }
