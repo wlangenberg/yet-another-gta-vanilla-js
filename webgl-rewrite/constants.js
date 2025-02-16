@@ -25,6 +25,10 @@ canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 const gravity = 2480;
 // const keys = [];
+const DAY_LENGTH = 240000
+const SUN_NIGHT_THRESHOLD = 300
+const DAY_START_HOUR = 5
+const SUN_HEIGHT = 1600
 
 
-export { keys, gravity, canvas, ctx, allEntities };
+export { keys, gravity, canvas, ctx, allEntities, DAY_LENGTH, SUN_NIGHT_THRESHOLD, DAY_START_HOUR, SUN_HEIGHT };

@@ -11,7 +11,7 @@ class Player extends BaseEntity {
 		
         this.id = Math.floor(Math.random() * (2 ** 31));
         this.name = "Player" + this.id;
-        this.jumpForce = 155525;
+        this.jumpForce = 85525;
         this.maxSpeed = 22225;
         this.friction = 0.75;
         this.airFriction = 0.85;
