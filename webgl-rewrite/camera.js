@@ -11,12 +11,11 @@ class Camera {
         this.viewportWidth = canvas.width / this.zoom;
         this.viewportHeight = canvas.height / this.zoom;
         // World dimensions are in pixels
-        this.worldWidth = options.worldWidth || canvas.width
-        this.worldHeight = options.worldHeight || canvas.height
+
 
         // Start with camera at (0,0) if not provided
-        this.x = options.x || 0
-        this.y = options.y || 0
+        this.x = options.x - this.viewportWidth / 2;
+        this.y = options.y - this.viewportHeight / 2;
         this.targetX = this.x
         this.targetY = this.y
 
@@ -46,7 +45,11 @@ class Camera {
     }
 
     setZoom(zoom) {
-        this.zoom = Math.min(Math.max(zoom, this.minZoom), this.maxZoom)
+        this.zoom = Math.min(Math.max(zoom, this.minZoom), this.maxZoom);
+        this.viewportWidth = this.canvas.width / this.zoom;
+        this.viewportHeight = this.canvas.height / this.zoom;
+        this.lowerThresholdY = this.viewportHeight * (5 / 6);
+        this.upperThresholdY = this.viewportHeight * (1 / 6);
     }
 
     // Build and return the combined view-projection matrix
