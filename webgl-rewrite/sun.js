@@ -6,12 +6,17 @@ class SunWebGL extends BaseEntity {
         this.gl = gl
         this.shadowLength = 5000
         this.cameraPos = { x: 0, y: 0 }
+        this.updateInterval = 1  // update shadows every 5 frames
+        this.frameCount = 0
+        this.cachedVertices = []
+        this.cachedQuads = []
         this.initShaders()
         this.initBuffers()
     }
 
     initShaders() {
         const gl = this.gl
+        // This shader is used to render the shadow geometry into the stencil buffer
         const vsSource = `
             attribute vec2 a_position;
             attribute float a_blur;
@@ -27,9 +32,7 @@ class SunWebGL extends BaseEntity {
             varying float v_blur;
             uniform float u_blurAmount;
             void main() {
-                float t = clamp(v_blur * u_blurAmount, 0.0, 1.0);
-                float alpha = mix(0.1, 0.8, t);
-                gl_FragColor = vec4(0.0, 0.0, 0.0, alpha);
+                gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
             }
         `
         const vShader = this.createShader(gl.VERTEX_SHADER, vsSource)
@@ -38,7 +41,6 @@ class SunWebGL extends BaseEntity {
         gl.attachShader(this.shadowProgram, vShader)
         gl.attachShader(this.shadowProgram, fShader)
         gl.linkProgram(this.shadowProgram)
-
         this.posLoc = gl.getAttribLocation(this.shadowProgram, "a_position")
         this.blurLoc = gl.getAttribLocation(this.shadowProgram, "a_blur")
         this.matrixLoc = gl.getUniformLocation(this.shadowProgram, "u_matrix")
@@ -63,6 +65,57 @@ class SunWebGL extends BaseEntity {
         this.shadowBuffer = gl.createBuffer()
     }
 
+    // This quad program is used to darken (multiply) the entire screen in shadowed areas
+    createQuadProgram() {
+        const gl = this.gl
+        const vsSource = `
+            attribute vec2 a_position;
+            void main() {
+                gl_Position = vec4(a_position, 0.0, 1.0);
+            }
+        `
+        const fsSource = `
+            precision mediump float;
+            uniform float u_shadowFactor;
+            void main() {
+                gl_FragColor = vec4(u_shadowFactor, u_shadowFactor, u_shadowFactor, 1.0);
+            }
+        `
+        const vShader = this.createShader(gl.VERTEX_SHADER, vsSource)
+        const fShader = this.createShader(gl.FRAGMENT_SHADER, fsSource)
+        const program = gl.createProgram()
+        gl.attachShader(program, vShader)
+        gl.attachShader(program, fShader)
+        gl.linkProgram(program)
+        return program
+    }
+
+    // This program can be used later if you want to draw shadow rays (line visualization)
+    createLineProgram() {
+        const gl = this.gl
+        const vsSource = `
+            attribute vec2 a_position;
+            uniform mat4 u_matrix;
+            void main() {
+                gl_Position = u_matrix * vec4(a_position, 0.0, 1.0);
+            }
+        `
+        const fsSource = `
+            precision mediump float;
+            uniform vec4 u_color;
+            void main() {
+                gl_FragColor = u_color;
+            }
+        `
+        const vShader = this.createShader(gl.VERTEX_SHADER, vsSource)
+        const fShader = this.createShader(gl.FRAGMENT_SHADER, fsSource)
+        const program = gl.createProgram()
+        gl.attachShader(program, vShader)
+        gl.attachShader(program, fShader)
+        gl.linkProgram(program)
+        return program
+    }
+
     // Given a vertex, extend it from the sun by the shadow length
     extendVertex(v, sunX, sunY, shadowLength) {
         let vx = v.x - sunX
@@ -79,8 +132,7 @@ class SunWebGL extends BaseEntity {
         }
     }
 
-    // Optimized silhouette computation for axis-aligned rectangles.
-    // For each obstacle, we determine which edge is furthest from the sun
+    // Compute shadow quads for obstacles (ignoring obstacles with color "green" or the sun itself)
     computeShadowQuads(obstacles) {
         const quads = []
         const sunX = this.x
@@ -97,7 +149,6 @@ class SunWebGL extends BaseEntity {
             const w = obs.width
             const h = obs.height
 
-            // Skip if the sun is inside the obstacle
             if (sunX >= x && sunX <= x + w && sunY >= y && sunY <= y + h) {
                 continue
             }
@@ -105,85 +156,67 @@ class SunWebGL extends BaseEntity {
             let silhouette0 = null
             let silhouette1 = null
 
-            // Cases when the sun lies directly along one axis
             if (sunX < x && sunY >= y && sunY <= y + h) {
-                // Sun is directly left: use the right edge
                 silhouette0 = { x: x + w, y: y }
                 silhouette1 = { x: x + w, y: y + h }
             }
             else if (sunX > x + w && sunY >= y && sunY <= y + h) {
-                // Sun is directly right: use the left edge
                 silhouette0 = { x: x, y: y }
                 silhouette1 = { x: x, y: y + h }
             }
             else if (sunY < y && sunX >= x && sunX <= x + w) {
-                // Sun is directly above: use the bottom edge
                 silhouette0 = { x: x, y: y + h }
                 silhouette1 = { x: x + w, y: y + h }
             }
             else if (sunY > y + h && sunX >= x && sunX <= x + w) {
-                // Sun is directly below: use the top edge
                 silhouette0 = { x: x, y: y }
                 silhouette1 = { x: x + w, y: y }
             }
             else {
-                // Diagonal cases
                 if (sunX < x && sunY < y) {
-                    // Sun is top-left of the rectangle
                     const diffX = (x + w) - sunX
                     const diffY = (y + h) - sunY
                     if (diffX > diffY) {
-                        // Dominant difference is horizontal: choose right edge
                         silhouette0 = { x: x + w, y: y }
                         silhouette1 = { x: x + w, y: y + h }
                     }
                     else {
-                        // Otherwise choose bottom edge
                         silhouette0 = { x: x, y: y + h }
                         silhouette1 = { x: x + w, y: y + h }
                     }
                 }
                 else if (sunX > x + w && sunY < y) {
-                    // Sun is top-right
                     const diffX = sunX - x
                     const diffY = (y + h) - sunY
                     if (diffX > diffY) {
-                        // Dominant difference is horizontal: choose left edge
                         silhouette0 = { x: x, y: y }
                         silhouette1 = { x: x, y: y + h }
                     }
                     else {
-                        // Otherwise choose bottom edge
                         silhouette0 = { x: x, y: y + h }
                         silhouette1 = { x: x + w, y: y + h }
                     }
                 }
                 else if (sunX < x && sunY > y + h) {
-                    // Sun is bottom-left
                     const diffX = (x + w) - sunX
                     const diffY = sunY - y
                     if (diffX > diffY) {
-                        // Choose right edge
                         silhouette0 = { x: x + w, y: y }
                         silhouette1 = { x: x + w, y: y + h }
                     }
                     else {
-                        // Choose top edge
                         silhouette0 = { x: x, y: y }
                         silhouette1 = { x: x + w, y: y }
                     }
                 }
                 else if (sunX > x + w && sunY > y + h) {
-                    // Sun is bottom-right
                     const diffX = sunX - x
                     const diffY = sunY - y
                     if (diffX > diffY) {
-                        // Choose left edge
                         silhouette0 = { x: x, y: y }
                         silhouette1 = { x: x, y: y + h }
                     }
                     else {
-                        // Choose top edge
                         silhouette0 = { x: x, y: y }
                         silhouette1 = { x: x + w, y: y }
                     }
@@ -222,10 +255,10 @@ class SunWebGL extends BaseEntity {
         const n = -1
         const f = 1
         return new Float32Array([
-            2/(r - l),    0,           0,  0,
-            0,          2/(t - b),     0,  0,
-            0,          0,   -2/(f - n),  0,
-            -(r + l)/(r - l), -(t + b)/(t - b), -(f + n)/(f - n), 1
+            2 / (r - l),    0,           0,  0,
+            0,          2 / (t - b),     0,  0,
+            0,          0,   -2 / (f - n),  0,
+            -(r + l) / (r - l), -(t + b) / (t - b), -(f + n) / (f - n), 1
         ])
     }
 
@@ -233,55 +266,90 @@ class SunWebGL extends BaseEntity {
         super.render(camera.getViewMatrix())
         this.cameraPos.x = camera.x
         this.cameraPos.y = camera.y
-        const obstacles = allGameObjects.filter(obj => obj !== this)
-        const quads = this.computeShadowQuads(obstacles)
+        this.frameCount++
 
-        // Build the vertex array for two triangles per quad
-        const verts = []
-        for (let q of quads) {
-            verts.push(q.v0.x, q.v0.y, 0.0,
-                       q.v1.x, q.v1.y, 0.0,
-                       q.v2.x, q.v2.y, 1.0)
-            verts.push(q.v0.x, q.v0.y, 0.0,
-                       q.v2.x, q.v2.y, 1.0,
-                       q.v3.x, q.v3.y, 1.0)
+        if (this.frameCount % this.updateInterval === 0) {
+            const obstacles = allGameObjects.filter(obj => obj !== this)
+            const quads = this.computeShadowQuads(obstacles)
+            const verts = []
+            for (let q of quads) {
+                verts.push(q.v0.x, q.v0.y, 0.0,
+                           q.v1.x, q.v1.y, 0.0,
+                           q.v2.x, q.v2.y, 1.0)
+                verts.push(q.v0.x, q.v0.y, 0.0,
+                           q.v2.x, q.v2.y, 1.0,
+                           q.v3.x, q.v3.y, 1.0)
+            }
+            this.cachedVertices = verts
+            this.cachedQuads = quads
         }
-        this.drawShadows(verts)
+
+        this.drawShadows(this.cachedVertices)
     }
 
+    // This method renders the shadow geometry to the stencil buffer (with depth testing off)
+    // and then draws a full-screen quad that multiplies (darkens) the scene in the marked areas.
     drawShadows(vertices) {
         if (!vertices.length) return
         const gl = this.gl
 
-        // Disable depth test and enable blending for smooth shadows
+        // Step 1: Render shadow geometry into the stencil buffer.
+        // Disable depth test so that shadow geometry marks all pixels (objects or background).
         gl.disable(gl.DEPTH_TEST)
-        gl.enable(gl.BLEND)
-        gl.blendFuncSeparate(
-            gl.SRC_ALPHA,
-            gl.ONE_MINUS_SRC_ALPHA,
-            gl.ONE,
-            gl.ONE
-        )
-
-        const data = new Float32Array(vertices)
+        gl.enable(gl.STENCIL_TEST)
+        gl.clear(gl.STENCIL_BUFFER_BIT)
+        gl.stencilFunc(gl.ALWAYS, 1, 0xFF)
+        gl.stencilOp(gl.REPLACE, gl.REPLACE, gl.REPLACE)
+        gl.colorMask(false, false, false, false)
+        gl.disable(gl.BLEND)
         gl.bindBuffer(gl.ARRAY_BUFFER, this.shadowBuffer)
+        const data = new Float32Array(vertices)
         gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW)
-
         gl.useProgram(this.shadowProgram)
         const stride = 3 * Float32Array.BYTES_PER_ELEMENT
         gl.enableVertexAttribArray(this.posLoc)
         gl.vertexAttribPointer(this.posLoc, 2, gl.FLOAT, false, stride, 0)
         gl.enableVertexAttribArray(this.blurLoc)
         gl.vertexAttribPointer(this.blurLoc, 1, gl.FLOAT, false, stride, 2 * Float32Array.BYTES_PER_ELEMENT)
-
         const ortho = this.computeOrthoMatrix()
         gl.uniformMatrix4fv(this.matrixLoc, false, ortho)
-        gl.uniform1f(this.blurAmountLoc, 1.0)
-
         gl.drawArrays(gl.TRIANGLES, 0, data.length / 3)
 
-        gl.blendEquation(gl.FUNC_ADD)
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+        // Step 2: Render a full-screen quad that applies a constant darkening factor
+        // (using multiplicative blending) to all pixels marked in the stencil.
+        gl.colorMask(true, true, true, true)
+        gl.stencilFunc(gl.EQUAL, 1, 0xFF)
+        gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP)
+        gl.enable(gl.BLEND)
+        // Use blendFunc( gl.ZERO, gl.SRC_COLOR ) so that the final color becomes:
+        // finalColor = dstColor * (quadColor)
+        gl.blendFunc(gl.ZERO, gl.SRC_COLOR)
+        if (!this.quadProgram) {
+            this.quadProgram = this.createQuadProgram()
+        }
+        gl.useProgram(this.quadProgram)
+        if (!this.quadBuffer) {
+            this.quadBuffer = gl.createBuffer()
+        }
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer)
+        const quadVertices = new Float32Array([
+            -1, -1,
+             1, -1,
+            -1,  1,
+            -1,  1,
+             1, -1,
+             1,  1
+        ])
+        gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW)
+        const posLoc = gl.getAttribLocation(this.quadProgram, "a_position")
+        gl.enableVertexAttribArray(posLoc)
+        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0)
+        const shadowFactorLoc = gl.getUniformLocation(this.quadProgram, "u_shadowFactor")
+        // Adjust this factor (e.g. 0.5 for a darker shadow) as desired.
+        gl.uniform1f(shadowFactorLoc, 0.4)
+        gl.drawArrays(gl.TRIANGLES, 0, 6)
+
+        gl.disable(gl.STENCIL_TEST)
         gl.disable(gl.BLEND)
         gl.enable(gl.DEPTH_TEST)
     }

@@ -155,9 +155,9 @@ function gameLoop() {
     }
 
     // Render the sun and shadows last
-    sun.render(fixedTimeStep, allEntities, spatialGrid, camera)
     skyGradient.update()
     skyGradient.draw()
+    sun.render(fixedTimeStep, allEntities, spatialGrid, camera)
 }
 
 gameLoop()
