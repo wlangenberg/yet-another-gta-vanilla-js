@@ -85,58 +85,83 @@ const run = async () => {
   resizeCanvas();
 
   const spatialGrid = new SpatialGrid(100);
-  let lastTime = performance.now();
-  const fixedTimeStep = 1 / 60; // 60 updates per second
-  let accumulatedTime = 0;
+  let lastTime = performance.now()
+  const fixedTimeStep = 1 / 90  // 60 updates per second
+  let accumulatedTime = 0
+  
+  // Create and style the FPS counter element
+  const fpsCounter = document.createElement('div')
+  fpsCounter.style.position = 'absolute'
+  fpsCounter.style.top = '10px'
+  fpsCounter.style.left = '10px'
+  fpsCounter.style.color = 'white'
+  fpsCounter.style.fontSize = '2rem'
+  fpsCounter.style.fontFamily = 'monospace'
+  document.body.appendChild(fpsCounter)
+  
+// Variables for FPS smoothing over a 500ms interval
+const fpsUpdateInterval = 500  // in milliseconds
+let lastFpsUpdate = performance.now()
+let fpsFrameCount = 0
+let displayedFPS = 0
 
-  function gameLoop() {
-    const currentTime = performance.now();
-    let deltaTime = (currentTime - lastTime) / 1000;
-    lastTime = currentTime;
+function gameLoop() {
+    const currentTime = performance.now()
+    let deltaTime = (currentTime - lastTime) / 1000
+    lastTime = currentTime
 
-    accumulatedTime += deltaTime;
+    // Increment frame count for FPS smoothing
+    fpsFrameCount++
+    if (currentTime - lastFpsUpdate >= fpsUpdateInterval) {
+        displayedFPS = fpsFrameCount / ((currentTime - lastFpsUpdate) / 1000)
+        fpsCounter.innerText = `FPS: ${Math.round(displayedFPS)}`
+        fpsFrameCount = 0
+        lastFpsUpdate = currentTime
+    }
 
-    requestAnimationFrame(gameLoop);
+    accumulatedTime += deltaTime
+
+    requestAnimationFrame(gameLoop)
 
     // Clear the canvas
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.clearColor(0, 0, 0, 0)
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
     // Update the camera
-    camera.update();
+    camera.update()
 
     // Get the combined view-projection matrix from the camera
-    const viewProjectionMatrix = camera.getViewMatrix();
+    const viewProjectionMatrix = camera.getViewMatrix()
 
     // Update entities and day-night cycle
     while (accumulatedTime >= fixedTimeStep) {
-      spatialGrid.clear();
-      allEntities.forEach(obj => spatialGrid.insert(obj));
-      allEntities.forEach(entity => {
-        if (entity.update) {
-          entity.update(fixedTimeStep, allEntities, spatialGrid, camera);
-        }
-      });
-      dayNightCycle.update(lastTime); // Update the day-night cycle
-      accumulatedTime -= fixedTimeStep;
+        spatialGrid.clear()
+        allEntities.forEach(obj => spatialGrid.insert(obj))
+        allEntities.forEach(entity => {
+            if (entity.update) {
+                entity.update(fixedTimeStep, allEntities, spatialGrid, camera)
+            }
+        })
+        dayNightCycle.update(lastTime)  // Update the day-night cycle
+        accumulatedTime -= fixedTimeStep
     }
 
     // Render all entities except the sun
     for (let i = 0; i < allEntities.length; i++) {
-      const entity = allEntities[i];
-      if (entity.render && !(entity instanceof SunWebGL)) {
-        entity.render(viewProjectionMatrix);
-      }
+        const entity = allEntities[i]
+        if (entity.render && !(entity instanceof SunWebGL)) {
+            entity.render(viewProjectionMatrix)
+        }
     }
 
     // Render the sun and shadows last
-    sun.render(fixedTimeStep, allEntities, spatialGrid, camera);
+    sun.render(fixedTimeStep, allEntities, spatialGrid, camera)
     skyGradient.update()
     skyGradient.draw()
+}
 
-  }
-
-  gameLoop();
+gameLoop()
+  
 }
 
 run();
