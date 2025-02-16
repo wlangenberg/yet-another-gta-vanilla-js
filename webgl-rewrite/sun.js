@@ -6,10 +6,16 @@ class SunWebGL extends BaseEntity {
         this.gl = gl
         this.shadowLength = 5000
         this.cameraPos = { x: 0, y: 0 }
-        this.updateInterval = 1  // update shadows every 5 frames
+        // Increase update interval to reduce calculations
+        this.updateInterval = 1  // Only update every 5 frames
         this.frameCount = 0
         this.cachedVertices = []
         this.cachedQuads = []
+        // Cache for ground segments
+        this.groundSegments = []
+        this.lastGroundHash = ""
+        // Viewport bounds for culling
+        this.viewportBounds = { left: 0, right: 0, top: 0, bottom: 0 }
         this.initShaders()
         this.initBuffers()
     }
@@ -132,112 +138,149 @@ class SunWebGL extends BaseEntity {
         }
     }
 
-    // Compute shadow quads for obstacles (ignoring obstacles with color "green" or the sun itself)
+    // Fast hash function for ground objects state
+    hashGroundObjects(groundObjects) {
+        return groundObjects.map(obj => `${obj.x},${obj.y},${obj.width}`).join('|')
+    }
+
+    // Optimized ground segment finding with caching
+    findGroundSegments(obstacles, forceUpdate = false) {
+        const groundObjects = obstacles.filter(obj => obj.isGround || obj.type === 'ground')
+            .sort((a, b) => a.x - b.x)
+
+        // Check if ground objects have changed
+        const currentHash = this.hashGroundObjects(groundObjects)
+        if (!forceUpdate && currentHash === this.lastGroundHash) {
+            return this.groundSegments
+        }
+
+        this.lastGroundHash = currentHash
+        const segments = []
+        let currentSegment = []
+
+        for (let obj of groundObjects) {
+            if (currentSegment.length === 0) {
+                currentSegment.push(obj)
+            } else {
+                const lastObj = currentSegment[currentSegment.length - 1]
+                // Simplified connection check
+                if (Math.abs(lastObj.y - obj.y) <= 1 && 
+                    Math.abs((lastObj.x + lastObj.width) - obj.x) <= 2) {
+                    currentSegment.push(obj)
+                } else {
+                    segments.push(currentSegment)
+                    currentSegment = [obj]
+                }
+            }
+        }
+
+        if (currentSegment.length > 0) {
+            segments.push(currentSegment)
+        }
+
+        this.groundSegments = segments
+        return segments
+    }
+
+    // Check if object is in view
+    isInView(obj) {
+        return !(obj.x + obj.width < this.viewportBounds.left ||
+                obj.x > this.viewportBounds.right ||
+                obj.y + obj.height < this.viewportBounds.top ||
+                obj.y > this.viewportBounds.bottom)
+    }
+
+    updateViewportBounds(camera) {
+        const margin = this.shadowLength // Add margin for shadows
+        this.viewportBounds = {
+            left: camera.x - margin,
+            right: camera.x + this.canvas.width + margin,
+            top: camera.y - margin,
+            bottom: camera.y + this.canvas.height + margin
+        }
+    }
+
     computeShadowQuads(obstacles) {
-        const quads = []
         const sunX = this.x
         const sunY = this.y
         const shadowLength = this.shadowLength
+        const quads = []
 
-        for (let i = 0; i < obstacles.length; i++) {
-            const obs = obstacles[i]
-            if (obs === this || obs.color === "green") {
-                continue
-            }
-            const x = obs.x
-            const y = obs.y
-            const w = obs.width
-            const h = obs.height
-
-            if (sunX >= x && sunX <= x + w && sunY >= y && sunY <= y + h) {
+        // Process non-ground objects first
+        const obstacleLength = obstacles.length
+        for (let i = 0; i < obstacleLength; i++) {
+            const obj = obstacles[i]
+            if (obj === this || obj.color === "green" || 
+                obj.isGround || obj.type === 'ground' || 
+                !this.isInView(obj)) {
                 continue
             }
 
-            let silhouette0 = null
-            let silhouette1 = null
-
-            if (sunX < x && sunY >= y && sunY <= y + h) {
-                silhouette0 = { x: x + w, y: y }
-                silhouette1 = { x: x + w, y: y + h }
-            }
-            else if (sunX > x + w && sunY >= y && sunY <= y + h) {
-                silhouette0 = { x: x, y: y }
-                silhouette1 = { x: x, y: y + h }
-            }
-            else if (sunY < y && sunX >= x && sunX <= x + w) {
-                silhouette0 = { x: x, y: y + h }
-                silhouette1 = { x: x + w, y: y + h }
-            }
-            else if (sunY > y + h && sunX >= x && sunX <= x + w) {
-                silhouette0 = { x: x, y: y }
-                silhouette1 = { x: x + w, y: y }
-            }
-            else {
-                if (sunX < x && sunY < y) {
-                    const diffX = (x + w) - sunX
-                    const diffY = (y + h) - sunY
-                    if (diffX > diffY) {
-                        silhouette0 = { x: x + w, y: y }
-                        silhouette1 = { x: x + w, y: y + h }
-                    }
-                    else {
-                        silhouette0 = { x: x, y: y + h }
-                        silhouette1 = { x: x + w, y: y + h }
-                    }
-                }
-                else if (sunX > x + w && sunY < y) {
-                    const diffX = sunX - x
-                    const diffY = (y + h) - sunY
-                    if (diffX > diffY) {
-                        silhouette0 = { x: x, y: y }
-                        silhouette1 = { x: x, y: y + h }
-                    }
-                    else {
-                        silhouette0 = { x: x, y: y + h }
-                        silhouette1 = { x: x + w, y: y + h }
-                    }
-                }
-                else if (sunX < x && sunY > y + h) {
-                    const diffX = (x + w) - sunX
-                    const diffY = sunY - y
-                    if (diffX > diffY) {
-                        silhouette0 = { x: x + w, y: y }
-                        silhouette1 = { x: x + w, y: y + h }
-                    }
-                    else {
-                        silhouette0 = { x: x, y: y }
-                        silhouette1 = { x: x + w, y: y }
-                    }
-                }
-                else if (sunX > x + w && sunY > y + h) {
-                    const diffX = sunX - x
-                    const diffY = sunY - y
-                    if (diffX > diffY) {
-                        silhouette0 = { x: x, y: y }
-                        silhouette1 = { x: x, y: y + h }
-                    }
-                    else {
-                        silhouette0 = { x: x, y: y }
-                        silhouette1 = { x: x + w, y: y }
-                    }
-                }
+            // Skip if sun is inside the object
+            if (sunX >= obj.x && sunX <= obj.x + obj.width && 
+                sunY >= obj.y && sunY <= obj.y + obj.height) {
+                continue
             }
 
-            if (silhouette0 && silhouette1) {
-                const extended0 = this.extendVertex(silhouette0, sunX, sunY, shadowLength)
-                const extended1 = this.extendVertex(silhouette1, sunX, sunY, shadowLength)
-                quads.push({
-                    v0: silhouette0,
-                    v1: silhouette1,
-                    v2: extended1,
-                    v3: extended0
-                })
+            // Optimized edge detection - only check necessary edges
+            if (sunX < obj.x) {
+                // Left edge
+                this.addQuad(quads, 
+                    { x: obj.x, y: obj.y },
+                    { x: obj.x, y: obj.y + obj.height },
+                    sunX, sunY, shadowLength
+                )
+            } else if (sunX > obj.x + obj.width) {
+                // Right edge
+                this.addQuad(quads,
+                    { x: obj.x + obj.width, y: obj.y },
+                    { x: obj.x + obj.width, y: obj.y + obj.height },
+                    sunX, sunY, shadowLength
+                )
+            }
+
+            // Top edge only if sun is above
+            if (sunY < obj.y) {
+                this.addQuad(quads,
+                    { x: obj.x, y: obj.y },
+                    { x: obj.x + obj.width, y: obj.y },
+                    sunX, sunY, shadowLength
+                )
+            }
+        }
+
+        // Process ground segments
+        const groundSegments = this.findGroundSegments(obstacles)
+        for (let segment of groundSegments) {
+            if (segment.length === 0) continue
+
+            const startX = segment[0].x
+            const endX = segment[segment.length - 1].x + segment[segment.length - 1].width
+            const y = segment[0].y
+
+            // Only cast shadow if sun is below the ground and segment is in view
+            if (sunY > y && this.isInView({ x: startX, y, width: endX - startX, height: 1 })) {
+                this.addQuad(quads,
+                    { x: startX, y },
+                    { x: endX, y },
+                    sunX, sunY, shadowLength
+                )
             }
         }
 
         return quads
     }
 
+    addQuad(quads, start, end, sunX, sunY, shadowLength) {
+        const extended0 = this.extendVertex(start, sunX, sunY, shadowLength)
+        const extended1 = this.extendVertex(end, sunX, sunY, shadowLength)
+        quads.push({
+            v0: start,
+            v1: end,
+            v2: extended1,
+            v3: extended0
+        })
+    }
     setPosition(x, y) {
         this.x = x
         this.y = y
@@ -268,18 +311,42 @@ class SunWebGL extends BaseEntity {
         this.cameraPos.y = camera.y
         this.frameCount++
 
+        // Update viewport bounds for culling
+        this.updateViewportBounds(camera)
+
+        // Only update shadows periodically
         if (this.frameCount % this.updateInterval === 0) {
             const obstacles = allGameObjects.filter(obj => obj !== this)
             const quads = this.computeShadowQuads(obstacles)
-            const verts = []
+            
+            // Optimize vertex array creation
+            const verts = new Float32Array(quads.length * 18) // 6 vertices * 3 components per quad
+            let offset = 0
+            
             for (let q of quads) {
-                verts.push(q.v0.x, q.v0.y, 0.0,
-                           q.v1.x, q.v1.y, 0.0,
-                           q.v2.x, q.v2.y, 1.0)
-                verts.push(q.v0.x, q.v0.y, 0.0,
-                           q.v2.x, q.v2.y, 1.0,
-                           q.v3.x, q.v3.y, 1.0)
+                // First triangle
+                verts[offset++] = q.v0.x
+                verts[offset++] = q.v0.y
+                verts[offset++] = 0.0
+                verts[offset++] = q.v1.x
+                verts[offset++] = q.v1.y
+                verts[offset++] = 0.0
+                verts[offset++] = q.v2.x
+                verts[offset++] = q.v2.y
+                verts[offset++] = 1.0
+                
+                // Second triangle
+                verts[offset++] = q.v0.x
+                verts[offset++] = q.v0.y
+                verts[offset++] = 0.0
+                verts[offset++] = q.v2.x
+                verts[offset++] = q.v2.y
+                verts[offset++] = 1.0
+                verts[offset++] = q.v3.x
+                verts[offset++] = q.v3.y
+                verts[offset++] = 1.0
             }
+            
             this.cachedVertices = verts
             this.cachedQuads = quads
         }
