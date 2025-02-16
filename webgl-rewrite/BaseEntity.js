@@ -20,8 +20,8 @@ class BaseEntity extends CollisionCore {
     init(gl) {
         this.gl = gl
         // Enable depth testing
-        gl.enable(gl.DEPTH_TEST)
-        gl.depthFunc(gl.LEQUAL)
+        // gl.enable(gl.DEPTH_TEST)
+        // gl.depthFunc(gl.LEQUAL)
 
         // Create and cache shared vertex buffer
         if (!BaseEntity.vertexBuffer) {

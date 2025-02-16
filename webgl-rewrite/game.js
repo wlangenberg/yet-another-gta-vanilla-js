@@ -57,6 +57,7 @@ const run = async () => {
     const camera = (() => {
         if (levelData.playerSpawns && levelData.playerSpawns.length > 0) {
             const randomSpawn = levelData.playerSpawns[Math.floor(Math.random() * levelData.playerSpawns.length)];
+
             myplayer = new Player(canvas, gl, {x:randomSpawn.x, y: randomSpawn.y});
             return new Camera(myplayer, canvas, { worldHeight: WORLD_HEIGHT, smoothness: 0.02, minZoom: 1, maxZoom: 2, zoom: 1, latency: 0.1, x: randomSpawn.x, y: randomSpawn.y, });
         }
@@ -67,10 +68,10 @@ const run = async () => {
     canvas.style.backgroundColor = bgColor // CSS
     gl.clearColor(r, g, b, a) // WebGL
     
-
+    
     allEntities.forEach(platform => platform.init(gl))
     allEntities.push(myplayer)
-    allEntities.push(new SunWebGL(WORLD_WIDTH /  2, -1200, 50, 50, canvas, gl, camera));
+    allEntities.push(new SunWebGL(WORLD_WIDTH /  2, -1200, 50, 50, canvas, gl));
 
     const resizeCanvas = () => {
         canvas.width = window.innerWidth
@@ -88,43 +89,55 @@ const run = async () => {
     let accumulatedTime = 0
     
     function gameLoop() {
-        const currentTime = performance.now()
-        let deltaTime = (currentTime - lastTime) / 1000
-        lastTime = currentTime
-
-        accumulatedTime += deltaTime
-
-        requestAnimationFrame(gameLoop)
+        const currentTime = performance.now();
+        let deltaTime = (currentTime - lastTime) / 1000;
+        lastTime = currentTime;
+    
+        accumulatedTime += deltaTime;
+    
+        requestAnimationFrame(gameLoop);
         
         // Clear the canvas
-        gl.clearColor(0, 0, 0, 0)
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    
         // Update the camera
-        camera.update()
-
+        camera.update();
+    
         // Get the combined view-projection matrix from the camera
-        const viewProjectionMatrix = camera.getViewMatrix()
-
+        const viewProjectionMatrix = camera.getViewMatrix();
+    
         // Update entities
         while (accumulatedTime >= fixedTimeStep) {
-            spatialGrid.clear()
-            allEntities.forEach(obj => spatialGrid.insert(obj))
+            spatialGrid.clear();
+            allEntities.forEach(obj => spatialGrid.insert(obj));
             allEntities.forEach(entity => {
                 if (entity.update) {
-                    entity.update(fixedTimeStep, allEntities, spatialGrid, camera)
+                    entity.update(fixedTimeStep, allEntities, spatialGrid, camera);
                 }
-            })
-            accumulatedTime -= fixedTimeStep
+            });
+            accumulatedTime -= fixedTimeStep;
+        }
+    
+        // Render all entities except the sun
+        
+        // Clear the depth buffer before rendering shadows
+        gl.clear(gl.DEPTH_BUFFER_BIT);
+        const entitesLength = allEntities.length
+        for (let i = 0; i < entitesLength; i++) {
+            const entity = allEntities[i]
+            if (entity.render && !(entity instanceof SunWebGL)) {
+                entity.render(viewProjectionMatrix);
+            }
+        }
+        for (let i = 0; i < entitesLength; i++) {
+            const entity = allEntities[i]
+            if (entity instanceof SunWebGL) {
+                entity.render(fixedTimeStep, allEntities, spatialGrid, camera);
+            }
         }
 
-        // Render all entities
-        allEntities.forEach(entity => {
-            if (entity.render) {
-                entity.render(viewProjectionMatrix)
-            }
-        })
-
+        // Render the sun and shadows last
     }
     
     gameLoop()

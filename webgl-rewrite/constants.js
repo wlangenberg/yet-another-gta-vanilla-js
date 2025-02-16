@@ -1,10 +1,9 @@
 const canvas = document.getElementById('gameCanvas')
-let ctx = canvas.getContext('webgl',
-    {
-        stencil: true,
-        depth: true
-    }
-)
+const ctx = canvas.getContext('webgl', {
+    stencil: true,
+    depth: true,
+    alpha: true  // Ensure alpha is enabled
+});
 const allEntities = []
 if (!ctx) {
     console.error('WebGL not supported, falling back on experimental-webgl')
@@ -26,7 +25,6 @@ canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 const gravity = 2480;
 // const keys = [];
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+
 
 export { keys, gravity, canvas, ctx, allEntities };
