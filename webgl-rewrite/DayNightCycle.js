@@ -1,24 +1,49 @@
-import { SUN_NIGHT_THRESHOLD, DAY_LENGTH, SUN_HEIGHT, DAY_START_HOUR } from './constants.js'
+import { DAY_LENGTH } from './constants.js'
 
 class DayNightCycle {
-    constructor(sun, skyGradient, speed = 1) {
+    constructor(sun, skyGradient, speed = 1, currentTime = 11, circleCenterY = 360) {
         this.sun = sun
         this.skyGradient = skyGradient
         this.speed = speed
+        this.currentTime = currentTime // Time of day (0-24)
+        this.circleCenterY = circleCenterY // Center Y position of the sun’s circular motion
+
+        this.distanceRadius = 2500 // X-axis movement range
+        this.heightRadius = 2000 // Y-axis movement range
+        this.startX = 0 // Center X position of the circular path
+
+        this.lastUpdateTime = null // Store the last timestamp for smooth updates
     }
 
-    update(time) {
-        const y = this.calculateSunY(time)
-        this.sun.setPosition(0, y)
+    update(deltaTime) {
+        if (this.lastUpdateTime === null) {
+            this.lastUpdateTime = deltaTime
+            return
+        }
+
+        // Calculate elapsed time since last frame
+        const elapsed = (deltaTime - this.lastUpdateTime) / 1000 // Convert to seconds
+        this.lastUpdateTime = deltaTime
+
+        // Increment time based on speed, ensuring it wraps around 24 hours
+        this.currentTime = (this.currentTime + (elapsed * this.speed * 24) / DAY_LENGTH) % 24
+
+        const dayFraction = this.calculateDayFraction()
+        const x = this.calculateSunX(dayFraction)
+        const y = this.calculateSunY(dayFraction)
+        this.sun.setPosition(x, y)
     }
 
-    calculateSunY(time) {
-        const scaledTime = (time * this.speed) % DAY_LENGTH
-        const dayFraction = scaledTime / DAY_LENGTH
-        const hours = dayFraction * 24
+    calculateSunX(dayFraction) {
+        return this.startX + Math.sin(2 * Math.PI * dayFraction) * this.distanceRadius
+    }
 
-        // Adjust to start at DAY_START_HOUR instead of a hardcoded 6 AM
-        return -SUN_HEIGHT + (1 + Math.sin(2 * Math.PI * ((hours - DAY_START_HOUR) / 24))) * SUN_HEIGHT
+    calculateSunY(dayFraction) {
+        return this.circleCenterY + Math.cos(2 * Math.PI * dayFraction) * this.heightRadius
+    }
+
+    calculateDayFraction() {
+        return this.currentTime / 24
     }
 }
 
