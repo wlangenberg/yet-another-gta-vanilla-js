@@ -6,6 +6,8 @@ import SpatialGrid from './SpatialGrid.js';
 import SunWebGL from './sun.js';
 import SkyGradient from './skyGradient.js';
 import DayNightCycle from './DayNightCycle.js';
+import SnowSystem from './SnowSystem.js';
+
 
 window.addEventListener('keydown', e => {
     keys[e.code] = true;
@@ -75,6 +77,7 @@ const run = async () => {
     canvas.style.backgroundColor = bgColor; // CSS
     gl.clearColor(r, g, b, a); // WebGL
 
+
     allEntities.forEach(platform => platform.init(gl));
     allEntities.push(myplayer);
     const sun = new SunWebGL(WORLD_WIDTH / 2, -1200, 350, 350, canvas, gl);
@@ -109,6 +112,9 @@ const run = async () => {
     let lastFpsUpdate = performance.now();
     let fpsFrameCount = 0;
     let displayedFPS = 0;
+    const snowSystem = new SnowSystem(canvas, gl, WORLD_WIDTH+5000);
+    const snowList = []
+    // allEntities.push(snowSystem);
 
     function gameLoop() {
         const currentTime = performance.now();
@@ -134,12 +140,19 @@ const run = async () => {
         while (accumulatedTime >= fixedTimeStep) {
             spatialGrid.clear();
             allEntities.forEach(obj => spatialGrid.insert(obj));
+            snowList.forEach(snow => {
+                // console.log('ss')
+                if (snow.update) {
+                    snow.update(fixedTimeStep, allEntities, spatialGrid, camera);
+                }
+            });
             allEntities.forEach(entity => {
                 if (entity.update) {
                     entity.update(fixedTimeStep, allEntities, spatialGrid, camera);
                 }
             });
             dayNightCycle.update(lastTime);
+            snowSystem.update(fixedTimeStep, snowList, spatialGrid); // Add this line
             accumulatedTime -= fixedTimeStep;
         }
 
@@ -150,6 +163,12 @@ const run = async () => {
 
         for (let i = 0; i < allEntities.length; i++) {
             const entity = allEntities[i];
+            if (entity.render && !(entity instanceof SunWebGL)) {
+                entity.render(viewProjectionMatrix);
+            }
+        }
+        for (let i = 0; i < snowList.length; i++) {
+            const entity = snowList[i];
             if (entity.render && !(entity instanceof SunWebGL)) {
                 entity.render(viewProjectionMatrix);
             }
