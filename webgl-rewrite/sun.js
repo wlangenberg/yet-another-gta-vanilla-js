@@ -413,70 +413,81 @@ class SunWebGL extends BaseEntity {
 	}
 
 	// Render the shadow geometry to the stencil buffer and then darken the marked areas
+
+
+	
 	drawShadows(vertices) {
-		if (!vertices.length) return
-		const gl = this.gl
-		// Save current depth range and depth function
-		const currentDepthRange = gl.getParameter(gl.DEPTH_RANGE)
-		const currentDepthFunc = gl.getParameter(gl.DEPTH_FUNC)
-		// Step 1: Render shadow geometry into the stencil buffer.
-		gl.enable(gl.DEPTH_TEST)
-		gl.depthRange(1, 1)
-		gl.enable(gl.STENCIL_TEST)
-		gl.clear(gl.STENCIL_BUFFER_BIT)
-		gl.stencilFunc(gl.ALWAYS, 1, 0xFF)
-		gl.stencilOp(gl.REPLACE, gl.REPLACE, gl.REPLACE)
-		gl.colorMask(false, false, false, false)
-		gl.disable(gl.BLEND)
-		gl.bindBuffer(gl.ARRAY_BUFFER, this.shadowBuffer)
-		const data = new Float32Array(vertices)
-		gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW)
-		gl.useProgram(this.shadowProgram)
-		const stride = 3 * Float32Array.BYTES_PER_ELEMENT
-		gl.enableVertexAttribArray(this.posLoc)
-		gl.vertexAttribPointer(this.posLoc, 2, gl.FLOAT, false, stride, 0)
-		gl.enableVertexAttribArray(this.blurLoc)
-		gl.vertexAttribPointer(this.blurLoc, 1, gl.FLOAT, false, stride, 2 * Float32Array.BYTES_PER_ELEMENT)
-		const ortho = this.computeOrthoMatrix()
-		gl.uniformMatrix4fv(this.matrixLoc, false, ortho)
-		// Use depthFunc GREATER so that the shadow geometry marks areas where objects exist
-		gl.depthFunc(gl.GREATER)
-		gl.drawArrays(gl.TRIANGLES, 0, data.length / 3)
-		// Restore previous depth settings
-		gl.depthRange(currentDepthRange[0], currentDepthRange[1])
-		gl.depthFunc(currentDepthFunc)
-		// Step 2: Render a full–screen quad that darkens the marked areas
-		gl.colorMask(true, true, true, true)
-		gl.stencilFunc(gl.EQUAL, 1, 0xFF)
-		gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP)
-		gl.enable(gl.BLEND)
-		gl.blendFunc(gl.ZERO, gl.SRC_COLOR)
+		if (!vertices.length) return;
+		const gl = this.gl;
+	
+		// Step 1: Render shadow geometry into the stencil buffer
+		gl.enable(gl.DEPTH_TEST);
+		gl.depthFunc(gl.ALWAYS); // Always pass depth test
+		gl.enable(gl.STENCIL_TEST); // Enable stencil testing
+		gl.clear(gl.STENCIL_BUFFER_BIT); // Clear the stencil buffer
+		gl.stencilFunc(gl.ALWAYS, 1, 0xFF); // Always pass stencil test
+		gl.stencilOp(gl.REPLACE, gl.REPLACE, gl.REPLACE); // Replace stencil buffer value
+		gl.colorMask(false, false, false, false); // Disable color writing
+	
+		// Bind shadow buffer and upload vertex data
+		gl.bindBuffer(gl.ARRAY_BUFFER, this.shadowBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW);
+	
+		// Use shadow program
+		gl.useProgram(this.shadowProgram);
+		const stride = 3 * Float32Array.BYTES_PER_ELEMENT;
+		gl.enableVertexAttribArray(this.posLoc);
+		gl.vertexAttribPointer(this.posLoc, 2, gl.FLOAT, false, stride, 0);
+		gl.enableVertexAttribArray(this.blurLoc);
+		gl.vertexAttribPointer(this.blurLoc, 1, gl.FLOAT, false, stride, 2 * Float32Array.BYTES_PER_ELEMENT);
+	
+		// Set orthographic projection matrix
+		const ortho = this.computeOrthoMatrix();
+		gl.uniformMatrix4fv(this.matrixLoc, false, ortho);
+	
+		// Draw shadow geometry
+		gl.drawArrays(gl.TRIANGLES, 0, vertices.length / 3);
+	
+		// Step 2: Darken areas marked in the stencil buffer
+		gl.colorMask(true, true, true, true); // Enable color writing
+		gl.stencilFunc(gl.EQUAL, 1, 0xFF); // Only render where stencil value is 1
+		gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP); // Keep stencil values
+		gl.disable(gl.DEPTH_TEST); // Disable depth testing for the full-screen quad
+		gl.enable(gl.BLEND); // Enable blending for darkening effect
+		gl.blendFunc(gl.ZERO, gl.SRC_COLOR); // Multiply existing color with shadow factor
+	
+		// Use quad program for full-screen darkening
 		if (!this.quadProgram) {
-			this.quadProgram = this.createQuadProgram()
+			this.quadProgram = this.createQuadProgram();
 		}
-		gl.useProgram(this.quadProgram)
+		gl.useProgram(this.quadProgram);
+	
+		// Bind quad buffer and upload vertex data
 		if (!this.quadBuffer) {
-			this.quadBuffer = gl.createBuffer()
+			this.quadBuffer = gl.createBuffer();
 		}
-		gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer)
+		gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
 		const quadVertices = new Float32Array([
-			-1, -1,
-			1, -1,
-			-1,  1,
-			-1,  1,
-			1, -1,
-			1,  1
-		])
-		gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW)
-		const posLoc = gl.getAttribLocation(this.quadProgram, "a_position")
-		gl.enableVertexAttribArray(posLoc)
-		gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0)
-		const shadowFactorLoc = gl.getUniformLocation(this.quadProgram, "u_shadowFactor")
-		gl.uniform1f(shadowFactorLoc, 0.4)
-		gl.drawArrays(gl.TRIANGLES, 0, 6)
-		gl.disable(gl.STENCIL_TEST)
-		gl.disable(gl.BLEND)
-		gl.enable(gl.DEPTH_TEST)
+			-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1
+		]);
+		gl.bufferData(gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW);
+	
+		// Set vertex attribute pointers
+		const posLoc = gl.getAttribLocation(this.quadProgram, "a_position");
+		gl.enableVertexAttribArray(posLoc);
+		gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+	
+		// Set shadow factor uniform
+		const shadowFactorLoc = gl.getUniformLocation(this.quadProgram, "u_shadowFactor");
+		gl.uniform1f(shadowFactorLoc, 0.4); // Darken by 50%
+	
+		// Draw full-screen quad
+		gl.drawArrays(gl.TRIANGLES, 0, 6);
+	
+		// Clean up
+		gl.disable(gl.STENCIL_TEST);
+		gl.disable(gl.BLEND);
+		gl.enable(gl.DEPTH_TEST); // Re-enable depth testing for other rendering
 	}
 }
 

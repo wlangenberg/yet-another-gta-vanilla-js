@@ -115,12 +115,11 @@ const run = async () => {
     const snowSystem = new SnowSystem(canvas, gl, WORLD_WIDTH+5000);
     const snowList = []
     // allEntities.push(snowSystem);
-
     function gameLoop() {
         const currentTime = performance.now();
         let deltaTime = (currentTime - lastTime) / 1000;
         lastTime = currentTime;
-
+    
         fpsFrameCount++;
         if (currentTime - lastFpsUpdate >= fpsUpdateInterval) {
             displayedFPS = fpsFrameCount / ((currentTime - lastFpsUpdate) / 1000);
@@ -128,20 +127,21 @@ const run = async () => {
             fpsFrameCount = 0;
             lastFpsUpdate = currentTime;
         }
-
+    
         accumulatedTime += deltaTime;
         requestAnimationFrame(gameLoop);
-
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    
+        // Clear all buffers
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
         camera.update();
-
+    
         const viewProjectionMatrix = camera.getViewMatrix();
-
+    
+        // Update game objects
         while (accumulatedTime >= fixedTimeStep) {
             spatialGrid.clear();
             allEntities.forEach(obj => spatialGrid.insert(obj));
             snowList.forEach(snow => {
-                // console.log('ss')
                 if (snow.update) {
                     snow.update(fixedTimeStep, allEntities, spatialGrid, camera);
                 }
@@ -152,28 +152,36 @@ const run = async () => {
                 }
             });
             dayNightCycle.update(lastTime);
-            snowSystem.update(fixedTimeStep, snowList, spatialGrid); // Add this line
+            snowSystem.update(fixedTimeStep, snowList, spatialGrid);
             accumulatedTime -= fixedTimeStep;
         }
-
+    
+        // Render sky gradient without depth testing
         gl.disable(gl.DEPTH_TEST);
         skyGradient.update();
         skyGradient.draw();
+    
+        // Enable depth testing for objects
         gl.enable(gl.DEPTH_TEST);
-
+        gl.depthFunc(gl.LEQUAL);
+    
+        // Render all entities with depth testing
         for (let i = 0; i < allEntities.length; i++) {
             const entity = allEntities[i];
             if (entity.render && !(entity instanceof SunWebGL)) {
                 entity.render(viewProjectionMatrix);
             }
         }
+    
+        // Render snow with depth testing
         for (let i = 0; i < snowList.length; i++) {
             const entity = snowList[i];
             if (entity.render && !(entity instanceof SunWebGL)) {
                 entity.render(viewProjectionMatrix);
             }
         }
-
+    
+        // Render sun and shadows
         sun.render(fixedTimeStep, allEntities, spatialGrid, camera);
     }
     gameLoop();

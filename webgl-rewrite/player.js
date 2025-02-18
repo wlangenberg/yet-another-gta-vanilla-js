@@ -13,7 +13,7 @@ class Player extends BaseEntity {
         this.name = "Player" + this.id;
         this.jumpForce = 85525;
         this.maxSpeed = 22225;
-        this.friction = 0.75;
+        this.friction = 0.82;
         this.airFriction = 0.85;
         this.baseAcceleration = 20.0; // Base acceleration rate
         this.maxAcceleration = 1550;
@@ -21,21 +21,16 @@ class Player extends BaseEntity {
         this.grounded = false;
         this.runTime = 0; // Track the time running in one direction
         this.movingStartTime = null; // Track when movement starts
-        this.initialBoostFactor = 20; // Factor by which to multiply acceleration during initial boost
+        this.initialBoostFactor = 60; // Factor by which to multiply acceleration during initial boost
         this.jumpMomentum = 0; // Horizontal momentum during jumps
         this.hasGravity = true
 		this.init(gl)
 	}
 
 	update(deltaTime, allEntities, spatialGrid) {
-        this.handleFriction(deltaTime);
         this.handleMovement(deltaTime, allEntities);
         super.update(deltaTime, allEntities, spatialGrid)
 	}
-
-    handleFriction(interval) {
-        this.velocity.x *= this.grounded ? this.friction : this.airFriction
-    }
 
     handleMovement(interval, platforms) {
         const accelerationFactor = this.grounded ? 1 : 0.9; // Reduce acceleration in the air
@@ -90,7 +85,7 @@ class Player extends BaseEntity {
             this.movingStartTime = null; // Clear moving start time
         }
 
-        let accelerationIncrease = this.baseAcceleration * (1 + this.runTime / 1); // Gradually increase acceleration with run time
+        let accelerationIncrease = this.baseAcceleration * this.runTime; // Gradually increase acceleration with run time
 
         if (this.movingStartTime !== null) {
             accelerationIncrease += this.initialBoostFactor; // Apply initial speed boost
