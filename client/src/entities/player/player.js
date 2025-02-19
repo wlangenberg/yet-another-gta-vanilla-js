@@ -1,6 +1,6 @@
-import { BaseEntity } from "./BaseEntity.js";
-import Fragment from "./Fragment.js";
-import { keys } from "../constants.js";
+import { BaseEntity } from "../core/BaseEntity.js";
+import Fragment from "../fragments/Fragment.js";
+import { keys } from "../../configuration/constants.js";
 
 class Player extends BaseEntity {
     constructor(canvas, gl, { x = 600, y = 400, isLocalPlayer = true } = {}) {

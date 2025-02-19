@@ -1,8 +1,8 @@
 
-import { STATE, allEntities, canvas, ctx as gl } from './constants.js'
-import Player from './player.js'
-import toast from './src/scripts/toast.js'
-import Platform from './platform.js'
+import { STATE, allEntities, canvas, ctx as gl } from '../configuration/constants.js'
+import Player from '../entities/player/player.js'
+import toast from './toast.js'
+import Platform from '../entities/platforms/platform.js'
 
 class Socket {
     ws

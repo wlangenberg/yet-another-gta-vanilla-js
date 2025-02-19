@@ -8,7 +8,7 @@
  * Additionally, during night a procedural star field is overlaid that slowly blinks.
  */
 
-import { SUN_NIGHT_THRESHOLD } from './constants.js'
+import { SUN_NIGHT_THRESHOLD } from '../configuration/constants.js'
 
 class SkyGradient {
     constructor(gl, sun) {

@@ -1,4 +1,4 @@
-import { BaseEntity } from "./BaseEntity.js"
+import { BaseEntity } from "./core/BaseEntity.js"
 
 class SunWebGL extends BaseEntity {
     constructor(x, y, width, height, canvas, gl) {

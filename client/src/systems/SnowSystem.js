@@ -1,4 +1,4 @@
-import Snow from "./SnowParticle.js";
+import Snow from "../entities/SnowParticle.js";
 class SnowSystem {
     constructor(canvas, gl, worldWidth) {
         this.canvas = canvas;

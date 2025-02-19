@@ -1,5 +1,5 @@
-import { BaseEntity } from "./BaseEntity.js";
-import CollisionCore from "./CollisionCore.js";
+import { BaseEntity } from "../core/BaseEntity.js";
+import CollisionCore from "../../systems/CollisionCore.js";
 
 class Fragment extends BaseEntity {
 	constructor(canvas, gl, { x, y, width, height, color }) {

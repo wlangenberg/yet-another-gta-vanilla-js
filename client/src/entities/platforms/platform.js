@@ -1,5 +1,5 @@
 
-import {BaseEntity} from "./BaseEntity.js"
+import {BaseEntity} from "../core/BaseEntity.js"
 
 class Platform extends BaseEntity {
 	constructor(x, y, width, height, color) {

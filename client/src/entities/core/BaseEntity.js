@@ -1,5 +1,5 @@
-import { gravity, allEntities } from './constants.js';
-import CollisionCore from './CollisionCore.js';
+import { gravity, allEntities } from '../../configuration/constants.js';
+import CollisionCore from '../../systems/CollisionCore.js';
 
 // Shared transformation matrices to avoid creating new ones each frame
 const modelMatrix = mat4.create();

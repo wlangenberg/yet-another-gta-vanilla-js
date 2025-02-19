@@ -1,4 +1,4 @@
-import { DAY_LENGTH } from './constants.js'
+import { DAY_LENGTH } from '../configuration/constants.js'
 
 class DayNightCycle {
     constructor(sun, skyGradient, speed = 1, currentTime = 11, circleCenterY = 360) {

@@ -1,4 +1,4 @@
-import { BaseEntity } from "./BaseEntity.js";
+import { BaseEntity } from "./core/BaseEntity.js";
 
 class Snow extends BaseEntity {
     constructor(x, y, size, canvas) {

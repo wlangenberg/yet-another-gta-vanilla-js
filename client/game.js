@@ -1,15 +1,15 @@
-import Player from './player.js';
-import Platform from './platform.js';
-import { keys, ctx as gl, allEntities, canvas, STATE } from './constants.js';
-import Camera from './camera.js';
-import SpatialGrid from './SpatialGrid.js';
-import SunWebGL from './sun.js';
-import SkyGradient from './skyGradient.js';
-import DayNightCycle from './DayNightCycle.js';
-import SnowSystem from './SnowSystem.js';
-import EntityBatchRenderer from './EntityBatchRenderer.js';
-import Fragment from './Fragment.js';
-import socket from './sockets.js'
+import Player from './src/entities/player/player.js';
+import Platform from './src/entities/platforms/platform.js';
+import { keys, ctx as gl, allEntities, canvas, STATE } from './src/configuration/constants.js';
+import Camera from './src/systems/camera.js';
+import SpatialGrid from './src/systems/SpatialGrid.js';
+import SunWebGL from './src/entities/sun.js';
+import SkyGradient from './src/systems/skyGradient.js';
+import DayNightCycle from './src/systems/DayNightCycle.js';
+import SnowSystem from './src/systems/SnowSystem.js';
+import EntityBatchRenderer from './src/systems/EntityBatchRenderer.js';
+import Fragment from './src/entities/fragments/Fragment.js';
+import socket from './src/systems/sockets.js'
 
 window.addEventListener('keydown', e => {
 		keys[e.code] = true;
@@ -45,7 +45,7 @@ function isEntityVisible(entity, camera) {
 
 const run = async () => {
 
-		const levelData = await fetch('level.json')
+		const levelData = await fetch('assets/levels/level.json')
 			.then(response => response.json())
 			.catch(error => console.error('Error loading level:', error));
 
