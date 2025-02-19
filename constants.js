@@ -1,8 +1,26 @@
-const canvas = document.querySelector('canvas');
-const ctx = canvas.getContext('2d');
+const canvas = document.getElementById('gameCanvas')
+const ctx = canvas.getContext('webgl', {
+    stencil: true,
+    depth: true,
+    alpha: true  // Ensure alpha is enabled
+});
+const allEntities = []
+if (!ctx) {
+    console.error('WebGL not supported, falling back on experimental-webgl')
+    ctx = canvas.getContext('experimental-webgl', { depth: true })
+}
+
+if (!ctx) {
+    alert('Your browser does not support WebGL')
+}
+
+const keys = {}
+
+const gravity = 2480;
+const DAY_LENGTH = 240
+const SUN_NIGHT_THRESHOLD = 2000
+
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
-const gravity = 0.01;
-const keys = [];
 
-export { keys, gravity, canvas, ctx };
+export { keys, gravity, canvas, ctx, allEntities, DAY_LENGTH, SUN_NIGHT_THRESHOLD };
