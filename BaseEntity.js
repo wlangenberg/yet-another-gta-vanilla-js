@@ -1,4 +1,4 @@
-import { gravity } from './constants.js';
+import { gravity, allEntities } from './constants.js';
 import CollisionCore from './CollisionCore.js';
 
 // Shared transformation matrices to avoid creating new ones each frame
@@ -19,6 +19,7 @@ class BaseEntity extends CollisionCore {
 
     constructor(x, y, width, height, color, canvas) {
         super();
+        this.id = allEntities.length + 1
         this.x = x;
         this.y = y;
         this.width = width;

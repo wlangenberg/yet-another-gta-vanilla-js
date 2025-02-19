@@ -9,7 +9,7 @@ import DayNightCycle from './DayNightCycle.js';
 import SnowSystem from './SnowSystem.js';
 import EntityBatchRenderer from './EntityBatchRenderer.js';
 import Fragment from './Fragment.js';
-import { updatePlayerState } from './sockets.js'
+import socket from './sockets.js'
 
 window.addEventListener('keydown', e => {
 		keys[e.code] = true;
@@ -62,24 +62,24 @@ const run = async () => {
 				color = [1.0, 1.0, 1.0, 1.0];
 			}
             const platform = new Platform(rect.x, rect.y, rect.width, rect.height, color)
-			// allEntities.push(platform);
-            const newWidth = platform.width / 2;
-            const newHeight = platform.height / 2;
-            for (let row = 0; row < 2; row++) {
-                for (let col = 0; col < 2; col++) {
-                    const fragmentX = platform.x + col * newWidth;
-                    const fragmentY = platform.y + row * newHeight;
-                    const fragment = new Fragment(platform.canvas, platform.gl, {
-                        x: fragmentX,
-                        y: fragmentY,
-                        width: newWidth,
-                        height: newHeight,
-                        color: Array.from(platform.color)
-                    });
-                    fragment.sleep = false
-                    allEntities.push(fragment);
-                }
-            }
+			allEntities.push(platform);
+            // const newWidth = platform.width / 2;
+            // const newHeight = platform.height / 2;
+            // for (let row = 0; row < 2; row++) {
+            //     for (let col = 0; col < 2; col++) {
+            //         const fragmentX = platform.x + col * newWidth;
+            //         const fragmentY = platform.y + row * newHeight;
+            //         const fragment = new Fragment(platform.canvas, platform.gl, {
+            //             x: fragmentX,
+            //             y: fragmentY,
+            //             width: newWidth,
+            //             height: newHeight,
+            //             color: Array.from(platform.color)
+            //         });
+            //         fragment.sleep = false
+            //         allEntities.push(fragment);
+            //     }
+            // }
 		});
         
         console.log('allEntities', allEntities.length)
@@ -156,7 +156,7 @@ const run = async () => {
 
 		// Create a batch renderer for instanced drawing.
 		const batchRenderer = new EntityBatchRenderer(gl);
-
+		socket.connectOnline()
 		function gameLoop() {
 			const currentTime = performance.now();
 			let deltaTime = (currentTime - lastTime) / 1000;
@@ -194,10 +194,13 @@ const run = async () => {
 					if (entity.update) {
 						entity.update(fixedTimeStep, allEntities, spatialGrid, camera);
 					} 
+					if ((entity?.sleeping === false) || (entity.name && entity.isLocalPlayer)) {
+						socket.updatePlayerState(entity)
+					}
                 }
 				dayNightCycle.update(lastTime);
 				snowSystem.update(fixedTimeStep, snowList, spatialGrid);
-				updatePlayerState(STATE.myPlayer);
+				// socket.updatePlayerState(STATE.myPlayer);
 				accumulatedTime -= fixedTimeStep;
 			}
 
