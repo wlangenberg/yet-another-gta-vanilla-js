@@ -6,12 +6,12 @@ import Platform from './platform.js'
 
 class Socket {
     ws
+    
     connectOnline() {
-        let wsUrl = `wss://${location.hostname}/ws`;
+        const wsUrl = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') 
+            ? `ws://localhost:8081/ws` 
+            : `wss://${location.hostname}/ws`
         
-        if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-            wsUrl = `ws://127.0.0.1:8081/ws`;
-        }
         
         this.ws = new WebSocket(wsUrl);
         console.log('SSS', this.ws)
