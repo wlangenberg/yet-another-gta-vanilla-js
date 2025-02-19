@@ -2,6 +2,7 @@ class SpatialGrid {
     constructor(cellSize) {
         this.cellSize = cellSize;
         this.cells = new Map();
+        this.queryId = 0;
     }
 
     getCellKey(x, y) {
@@ -26,25 +27,29 @@ class SpatialGrid {
     }
 
     query(object) {
+        // Increase the queryId for each query call.
+        this.queryId++;
         const startX = Math.floor(object.x / this.cellSize);
         const endX = Math.floor((object.x + object.width) / this.cellSize);
         const startY = Math.floor(object.y / this.cellSize);
         const endY = Math.floor((object.y + object.height) / this.cellSize);
-
-        const nearbyObjects = new Set();
-
+        const result = [];
         for (let x = startX; x <= endX; x++) {
             for (let y = startY; y <= endY; y++) {
                 const key = `${x},${y}`;
                 if (this.cells.has(key)) {
-                    for (const obj of this.cells.get(key)) {
-                        nearbyObjects.add(obj);
+                    const cell = this.cells.get(key);
+                    for (const obj of cell) {
+                        // Use a property on the object to mark if it was already added for this query.
+                        if (obj._lastQueryId !== this.queryId) {
+                            obj._lastQueryId = this.queryId;
+                            result.push(obj);
+                        }
                     }
                 }
             }
         }
-
-        return [...nearbyObjects]; // Convert set back to an array
+        return result;
     }
 
     clear() {
@@ -52,4 +57,4 @@ class SpatialGrid {
     }
 }
 
-export default SpatialGrid
+export default SpatialGrid;

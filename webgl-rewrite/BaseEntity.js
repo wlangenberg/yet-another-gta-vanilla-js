@@ -1,5 +1,5 @@
-import { gravity } from './constants.js'
-import CollisionCore from './CollisionCore.js'
+import { gravity } from './constants.js';
+import CollisionCore from './CollisionCore.js';
 
 // Shared transformation matrices to avoid creating new ones each frame
 const modelMatrix = mat4.create();
@@ -30,14 +30,22 @@ class BaseEntity extends CollisionCore {
         this.friction = 0.75;
         this.airFriction = 0.85;
         this.gravity = gravity;
-        this.grounded = false;
+        this.grounded = true;
         this.hasGravity = false;
         // Set a default stepHeight (in pixels) for stepping up small ledges.
-        this.stepHeight = this.height/3;
+        this.stepHeight = this.height / 3;
+        this.lastYMovement = 0
         
         // Cache half dimensions for render calculations
         this.halfWidth = width / 2;
         this.halfHeight = height / 2;
+
+        // Add mass property based on area (this can be customized as needed)
+        this.mass = width * height;
+
+        // Sleeping state flag for optimization.
+        // When true, the update function returns immediately unless a moving neighbor wakes it.
+        this.sleeping = true;
     }
 
     init(gl) {
@@ -121,8 +129,6 @@ class BaseEntity extends CollisionCore {
         
         return shader;
     }
-
-    // This method resolves any lingering overlap after collision resolution.
     resolveOverlap(spatialGrid) {
         const nearbyObjects = spatialGrid.query(this);
         for (const obj of nearbyObjects) {
@@ -150,26 +156,84 @@ class BaseEntity extends CollisionCore {
         }
     }
 
-    // Main update function now calls separate functions for physics, movement, and collision.
-    update(interval, allEntities, spatialGrid) {
-        if (!this.hasGravity) return;
 
-        // Apply gravity to the vertical velocity.
+    update(interval, allEntities, spatialGrid) {
+        if (!this.name) {
+            if (Math.abs(this.velocity.x) < 1 && Math.abs(this.velocity.y) < 1) {
+                this.lastYMovement += interval
+            } else {
+                this.sleeping = false
+            }
+            if (this.lastYMovement > 2 && Math.abs(this.velocity.y) < 0.1) {
+                this.sleeping = true;
+                this.grounded = true
+                this.lastYMovement = 0
+                return
+            }              
+
+        }
+
+        // Only update entities affected by gravity.
+        if (!this.hasGravity || (this.sleeping && !this.name)) return;
+
+        // Apply gravity.
         this.applyGravity(interval);
 
-        // Handle movement with collision resolution.
-        this.handleVelocity(interval, spatialGrid);
-
-        // Apply friction to slow horizontal movement to zero.
+        // Handle movement and collisions.
+        if (this.name) {
+            this.handleVelocity(interval, spatialGrid);
+        } else {
+            this.handleVelocityOptimized(interval, spatialGrid)
+        }
+        // Apply friction.
         this.applyFriction();
+        if (this.name) {
+            // If the entity's velocity is negligible after updates, put it to sleep.
+            this.resolveOverlap(spatialGrid);
 
-        // After collision resolution, correct any overlapping.
-        this.resolveOverlap(spatialGrid);
+        }
     }
 
     applyGravity(interval) {
         this.velocity.y += this.gravity * interval;
     }
+
+    handleVelocityOptimized(interval, spatialGrid) {
+        let dx = this.velocity.x * interval;
+        let dy = this.velocity.y * interval;
+
+        // Attempt horizontal movement
+        this.x += dx;
+        let collidedX = false;
+        const objectsX = spatialGrid.query(this);
+        for (const obj of objectsX) {
+            if (obj !== this && CollisionCore.staticCheckCollision(this, obj)) {
+                collidedX = true;
+                break;
+            }
+        }
+        if (collidedX) {
+            this.x -= dx;
+            this.velocity.x = 0;
+        }
+
+        // Attempt vertical movement
+        this.y += dy;
+        let collidedY = false;
+        const objectsY = spatialGrid.query(this);
+        for (const obj of objectsY) {
+            if (obj !== this && CollisionCore.staticCheckCollision(this, obj)) {
+                collidedY = true;
+                break;
+            }
+        }
+        if (collidedY) {
+            this.y -= dy;
+            this.velocity.y = 0;
+            this.grounded = true;
+        }
+    }
+
 
     handleVelocity(interval, spatialGrid) {
         let remainingTime = interval;
@@ -224,11 +288,44 @@ class BaseEntity extends CollisionCore {
                 }
             }
 
-            // Normal collision resolution:
+            // Move to the collision point.
             this.x += this.velocity.x * earliestCollisionTime * remainingTime;
             this.y += this.velocity.y * earliestCollisionTime * remainingTime;
 
-            // Adjust velocity by sliding along the collision surface.
+            // Mass-based collision response only when there is an actual velocity change (e.g., a push).
+            if (collisionObject && typeof collisionObject.mass !== "undefined") {
+                const normal = { x: collisionResult.normalX, y: collisionResult.normalY };
+                const relVelX = this.velocity.x - collisionObject.velocity.x;
+                const relVelY = this.velocity.y - collisionObject.velocity.y;
+                const relVelAlongNormal = relVelX * normal.x + relVelY * normal.y;
+                if (Math.abs(relVelAlongNormal) > 0.01) {
+                    const m1 = this.mass;
+                    const m2 = collisionObject.mass;
+                    const v1 = { x: this.velocity.x, y: this.velocity.y };
+                    const v2 = { x: collisionObject.velocity.x, y: collisionObject.velocity.y };
+                    const v1n = v1.x * normal.x + v1.y * normal.y;
+                    const v2n = v2.x * normal.x + v2.y * normal.y;
+                    const v1t = { x: v1.x - v1n * normal.x, y: v1.y - v1n * normal.y };
+                    const v2t = { x: v2.x - v2n * normal.x, y: v2.y - v2n * normal.y };
+                    const v1nAfter = (v1n * (m1 - m2) + 2 * m2 * v2n) / (m1 + m2);
+                    const v2nAfter = (v2n * (m2 - m1) + 2 * m1 * v1n) / (m1 + m2);
+                    // this.velocity.x = v1t.x + v1nAfter * normal.x;
+                    // this.velocity.y = v1t.y + v1nAfter * normal.y;
+                    collisionObject.velocity.x = v2t.x + v2nAfter * normal.x;
+                    collisionObject.velocity.y = v2t.y + v2nAfter * normal.y;
+                } else {
+                    // If there is no significant push, fallback to sliding along the surface.
+                    const dot = this.velocity.x * normal.x + this.velocity.y * normal.y;
+                    this.velocity.x = this.velocity.x - dot * normal.x;
+                    this.velocity.y = this.velocity.y - dot * normal.y;
+                }
+            } else {
+                // Fallback to simple sliding if mass is not defined.
+                const dot = this.velocity.x * collisionResult.normalX + this.velocity.y * collisionResult.normalY;
+                this.velocity.x = this.velocity.x - dot * collisionResult.normalX;
+                this.velocity.y = this.velocity.y - dot * collisionResult.normalY;
+            }
+
             const dot = this.velocity.x * collisionResult.normalX + this.velocity.y * collisionResult.normalY;
             this.velocity.x = this.velocity.x - dot * collisionResult.normalX;
             this.velocity.y = this.velocity.y - dot * collisionResult.normalY;
