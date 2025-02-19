@@ -22,5 +22,7 @@ const SUN_NIGHT_THRESHOLD = 2000
 
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
-
-export { keys, gravity, canvas, ctx, allEntities, DAY_LENGTH, SUN_NIGHT_THRESHOLD };
+const STATE = {
+    myPlayer: null,
+}
+export { keys, gravity, canvas, ctx, allEntities, DAY_LENGTH, SUN_NIGHT_THRESHOLD, STATE };

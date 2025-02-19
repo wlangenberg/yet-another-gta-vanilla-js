@@ -1,6 +1,6 @@
 import Player from './player.js';
 import Platform from './platform.js';
-import { keys, ctx as gl, allEntities, canvas } from './constants.js';
+import { keys, ctx as gl, allEntities, canvas, STATE } from './constants.js';
 import Camera from './camera.js';
 import SpatialGrid from './SpatialGrid.js';
 import SunWebGL from './sun.js';
@@ -9,6 +9,7 @@ import DayNightCycle from './DayNightCycle.js';
 import SnowSystem from './SnowSystem.js';
 import EntityBatchRenderer from './EntityBatchRenderer.js';
 import Fragment from './Fragment.js';
+import { updatePlayerState } from './sockets.js'
 
 window.addEventListener('keydown', e => {
 		keys[e.code] = true;
@@ -20,7 +21,6 @@ window.addEventListener('keyup', e => {
 const WORLD_WIDTH = 1024;
 const WORLD_HEIGHT = 768;
 
-let myplayer;
 function hexToWebGLColor(hex, alpha = 1.0) {
 		hex = hex.replace('#', '');
 		if (hex.length === 3) {
@@ -44,6 +44,7 @@ function isEntityVisible(entity, camera) {
 }
 
 const run = async () => {
+
 		const levelData = await fetch('level.json')
 			.then(response => response.json())
 			.catch(error => console.error('Error loading level:', error));
@@ -87,8 +88,8 @@ const run = async () => {
 		const camera = (() => {
 			if (levelData.playerSpawns && levelData.playerSpawns.length > 0) {
 				const randomSpawn = levelData.playerSpawns[Math.floor(Math.random() * levelData.playerSpawns.length)];
-				myplayer = new Player(canvas, gl, { x: randomSpawn.x, y: randomSpawn.y });
-				return new Camera(myplayer, canvas, {
+				STATE.myPlayer = new Player(canvas, gl, { x: randomSpawn.x, y: randomSpawn.y });
+				return new Camera(STATE.myPlayer, canvas, {
 					worldHeight: WORLD_HEIGHT,
 					smoothness: 0.02,
 					minZoom: 1,
@@ -109,7 +110,7 @@ const run = async () => {
 
 		// Initialize WebGL shared resources for entities.
 		allEntities.forEach(entity => entity.init(gl));
-		allEntities.push(myplayer);
+		allEntities.push(STATE.myPlayer);
 		const sun = new SunWebGL(WORLD_WIDTH / 2, -1200, 350, 350, canvas, gl);
 
 		const skyGradient = new SkyGradient(gl, sun);
@@ -196,6 +197,7 @@ const run = async () => {
                 }
 				dayNightCycle.update(lastTime);
 				snowSystem.update(fixedTimeStep, snowList, spatialGrid);
+				updatePlayerState(STATE.myPlayer);
 				accumulatedTime -= fixedTimeStep;
 			}
 

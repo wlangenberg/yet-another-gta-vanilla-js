@@ -3,7 +3,7 @@ import Fragment from "./Fragment.js";
 import { keys } from "../constants.js";
 
 class Player extends BaseEntity {
-    constructor(canvas, gl, { x = 600, y = 400 } = {}) {
+    constructor(canvas, gl, { x = 600, y = 400, isLocalPlayer = true } = {}) {
         const width = 50;
         const height = 50;
         super(x, y, width, height, [0.0, 0.0, 1.0, 1.0], canvas);
@@ -23,11 +23,12 @@ class Player extends BaseEntity {
         this.initialBoostFactor = 60;
         this.jumpMomentum = 0;
         this.hasGravity = true;
+        this.isLocalPlayer = isLocalPlayer
         this.init(gl);
     }
 
     update(deltaTime, allEntities, spatialGrid) {
-        this.handleMovement(deltaTime, allEntities);
+        if (this.isLocalPlayer) this.handleMovement(deltaTime, allEntities);
         super.update(deltaTime, allEntities, spatialGrid);
     }
 
