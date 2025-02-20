@@ -61,7 +61,7 @@ const run = async () => {
 			} else {
 				color = [1.0, 1.0, 1.0, 1.0];
 			}
-            const platform = new Platform(rect.x, rect.y, rect.width, rect.height, color)
+            const platform = new Platform(rect.x, rect.y, rect.width, rect.height, color, canvas, rect.type)
 			allEntities.push(platform);
             // const newWidth = platform.width / 2;
             // const newHeight = platform.height / 2;
@@ -161,7 +161,7 @@ const run = async () => {
 			const currentTime = performance.now();
 			let deltaTime = (currentTime - lastTime) / 1000;
 			lastTime = currentTime;
-
+	
 			fpsFrameCount++;
 			if (currentTime - lastFpsUpdate >= fpsUpdateInterval) {
 				displayedFPS = fpsFrameCount / ((currentTime - lastFpsUpdate) / 1000);
@@ -169,15 +169,15 @@ const run = async () => {
 				fpsFrameCount = 0;
 				lastFpsUpdate = currentTime;
 			}
-
+	
 			accumulatedTime += deltaTime;
 			requestAnimationFrame(gameLoop);
-
+	
 			gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
 			camera.update();
-
+	
 			const viewProjectionMatrix = camera.getViewMatrix();
-
+	
 			// Fixed update loop: update collisions and physics.
 			while (accumulatedTime >= fixedTimeStep) {
 				spatialGrid.clear();
@@ -188,40 +188,55 @@ const run = async () => {
 						snow.update(fixedTimeStep, allEntities, spatialGrid, camera);
 					}
 				});
-
-                for (let i = 0; i < allEntities.length; i++) {
-                    const entity = allEntities[i]
+	
+				for (let i = 0; i < allEntities.length; i++) {
+					const entity = allEntities[i];
 					if (entity.update) {
 						entity.update(fixedTimeStep, allEntities, spatialGrid, camera);
 					} 
 					if ((entity?.sleeping === false) || (entity.name && entity.isLocalPlayer)) {
-						socket.updatePlayerState(entity)
-						
+						socket.updatePlayerState(entity);
 					}
-					
-                }
+				}
 				dayNightCycle.update(lastTime);
 				snowSystem.update(fixedTimeStep, snowList, spatialGrid);
 				accumulatedTime -= fixedTimeStep;
 			}
-
+	
 			// Render sky gradient
 			gl.disable(gl.DEPTH_TEST);
 			skyGradient.update();
 			skyGradient.draw();
 			gl.enable(gl.DEPTH_TEST);
 			gl.depthFunc(gl.LEQUAL);
-
-			// Batch render visible entities using instanced drawing.
+	
+			// --- RENDERING PASSES WITH LAYERING ---
+			// 1. Render background entities first (type "background")
 			batchRenderer.begin();
 			for (let i = 0; i < allEntities.length; i++) {
 				const entity = allEntities[i];
-				if (entity.render && !(entity instanceof SunWebGL) && isEntityVisible(entity, camera)) {
+				if (entity.render && entity.type === 'background' && isEntityVisible(entity, camera)) {
 					batchRenderer.submit(entity);
 				}
 			}
 			batchRenderer.flush(viewProjectionMatrix);
-
+	
+			// 2. Render non-background entities (excluding SunWebGL)
+			batchRenderer.begin();
+			for (let i = 0; i < allEntities.length; i++) {
+				const entity = allEntities[i];
+				if (
+					entity.render &&
+					entity.type !== 'background' &&
+					!(entity instanceof SunWebGL) &&
+					isEntityVisible(entity, camera)
+				) {
+					batchRenderer.submit(entity);
+				}
+			}
+			batchRenderer.flush(viewProjectionMatrix);
+	
+			// 3. Render snow entities
 			batchRenderer.begin();
 			for (let i = 0; i < snowList.length; i++) {
 				const entity = snowList[i];
@@ -230,7 +245,8 @@ const run = async () => {
 				}
 			}
 			batchRenderer.flush(viewProjectionMatrix);
-
+	
+			// 4. Finally, render the sun.
 			sun.render(fixedTimeStep, allEntities, spatialGrid, camera);
 		}
 		gameLoop();

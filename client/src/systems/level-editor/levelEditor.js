@@ -1,3 +1,10 @@
+import * as editorTools from './tools.js'
+
+// export class EditorTools {
+//     PlayerSpawnTool = new PlayerSpawnTool()
+//     CircleTool = new CircleTool()
+// }
+
 // Global variables
 let gridSize = 12;
 let paintToolSize = 12;
@@ -16,88 +23,8 @@ let isPanning = false;
 let cameraX = 0, cameraY = 0;
 let lastMouseX = 0, lastMouseY = 0;
 
-class PaintTool {
-    constructor(id, name, color) {
-        this.id = id;
-        this.name = name;
-        this.color = color;
-    }
 
-    draw(ctx, x, y, size) {
-        console.warn("Draw method should be implemented in subclasses.");
-    }
-}
-
-class RectangleTool extends PaintTool {
-    constructor() {
-        super("rectangle", "Rectangle", "blue");
-    }
-
-    draw(ctx, x, y, size) {
-        ctx.fillStyle = this.color;
-        ctx.fillRect(x, y, size, size);
-    }
-}
-
-class GrassTool extends PaintTool {
-    constructor() {
-        super("grass", "Grass", "green");
-    }
-
-    draw(ctx, x, y, size) {
-        ctx.fillStyle = this.color;
-        ctx.fillRect(x, y, size, size);
-    }
-}
-
-class DirtTool extends PaintTool {
-    constructor() {
-        super("dirt", "Dirt", "sandybrown");
-    }
-
-    draw(ctx, x, y, size) {
-        ctx.fillStyle = this.color;
-        ctx.fillRect(x, y, size, size);
-    }
-}
-class StoneTool extends PaintTool {
-    constructor() {
-        super("stone", "Stone", "grey");
-    }
-
-    draw(ctx, x, y, size) {
-        ctx.fillStyle = this.color;
-        ctx.fillRect(x, y, size, size);
-    }
-}
-
-class CircleTool extends PaintTool {
-    constructor() {
-        super("circle", "Circle", "red");
-    }
-
-    draw(ctx, x, y, size) {
-        ctx.fillStyle = this.color;
-        ctx.beginPath();
-        ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
-        ctx.fill();
-    }
-}
-
-class PlayerSpawnTool extends PaintTool {
-    constructor() {
-        super("player_spawn", "Player Spawn", "green");
-    }
-
-    draw(ctx, x, y, size) {
-        ctx.fillStyle = this.color;
-        ctx.beginPath();
-        ctx.arc(x + size / 2, y + size / 2, size / 3, 0, Math.PI * 2);
-        ctx.fill();
-    }
-}
-
-const tools = [new RectangleTool(), new CircleTool(), new PlayerSpawnTool(), new GrassTool(), new DirtTool(), new StoneTool()];
+const tools = Object.values(editorTools).map(ToolClass => new ToolClass());
 let selectedTool = tools[0];
 
 function populateToolList() {

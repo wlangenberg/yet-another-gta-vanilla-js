@@ -20,7 +20,7 @@ class BaseEntity extends CollisionCore {
         this.samplerLocation = null;
         this.useTextureLocation = null;
     }
-    constructor(x, y, width, height, color, canvas) {
+    constructor(x, y, width, height, color, canvas, type) {
         super();
         this.id = allEntities.length + 1;
         this.x = x;
@@ -39,7 +39,7 @@ class BaseEntity extends CollisionCore {
         // Set a default stepHeight (in pixels) for stepping up small ledges.
         this.stepHeight = this.height / 3;
         this.lastYMovement = 0;
-        
+        this.type = type
         // Cache half dimensions for render calculations
         this.halfWidth = width / 2;
         this.halfHeight = height / 2;
@@ -171,7 +171,7 @@ class BaseEntity extends CollisionCore {
     resolveOverlap(spatialGrid) {
         const nearbyObjects = spatialGrid.query(this);
         for (const obj of nearbyObjects) {
-            if (obj === this) continue;
+            if (obj === this || (obj.type === 'background')) continue;
             if (CollisionCore.staticCheckCollision(this, obj)) {
                 // Compute overlap distances on each axis.
                 const overlapLeft = (this.x + this.width) - obj.x;
@@ -279,7 +279,7 @@ class BaseEntity extends CollisionCore {
             let collisionObject = null;
             const nearbyObjects = spatialGrid.query(this);
             for (const obj of nearbyObjects) {
-                if (obj !== this) {
+                if (obj !== this && obj.type !== 'background') {
                     const broadphaseBox = {
                         x: this.velocity.x > 0 ? this.x : this.x + this.velocity.x * remainingTime,
                         y: this.velocity.y > 0 ? this.y : this.y + this.velocity.y * remainingTime,

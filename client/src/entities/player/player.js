@@ -95,6 +95,7 @@ class Player extends BaseEntity {
                     entity.velocity.x += (Math.random() - 0.9) * 1112;
                     entity.velocity.y += (Math.random() - 0.9) * 1112;
                     entity.hasGravity = true;
+                    entity.type = 'fragment'
                     // entity.enableLife = true
                 }
             }
