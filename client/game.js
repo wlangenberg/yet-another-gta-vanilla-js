@@ -109,8 +109,8 @@ const run = async () => {
 		gl.clearColor(r, g, b, a);
 
 		// Initialize WebGL shared resources for entities.
-		allEntities.forEach(entity => entity.init(gl));
 		allEntities.push(STATE.myPlayer);
+		allEntities.forEach(entity => entity.init(gl));
 		const sun = new SunWebGL(WORLD_WIDTH / 2, -1200, 350, 350, canvas, gl);
 
 		const skyGradient = new SkyGradient(gl, sun);
@@ -196,7 +196,9 @@ const run = async () => {
 					} 
 					if ((entity?.sleeping === false) || (entity.name && entity.isLocalPlayer)) {
 						socket.updatePlayerState(entity)
+						
 					}
+					
                 }
 				dayNightCycle.update(lastTime);
 				snowSystem.update(fixedTimeStep, snowList, spatialGrid);
@@ -215,13 +217,15 @@ const run = async () => {
 			batchRenderer.begin();
 			for (let i = 0; i < allEntities.length; i++) {
 				const entity = allEntities[i];
-				if (entity.render && !(entity instanceof SunWebGL) && isEntityVisible(entity, camera)) {
+				if (entity.render && !(entity instanceof SunWebGL) && !(entity instanceof Player) && isEntityVisible(entity, camera)) {
 					batchRenderer.submit(entity);
+				}
+				if (entity instanceof Player) {
+					entity.render(camera.getViewMatrix())
 				}
 			}
 			batchRenderer.flush(viewProjectionMatrix);
 
-			// Render snow with instancing as well.
 			batchRenderer.begin();
 			for (let i = 0; i < snowList.length; i++) {
 				const entity = snowList[i];

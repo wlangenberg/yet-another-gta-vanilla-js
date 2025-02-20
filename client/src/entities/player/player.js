@@ -1,13 +1,14 @@
 import { BaseEntity } from "../core/BaseEntity.js";
 import Fragment from "../fragments/Fragment.js";
 import { keys } from "../../configuration/constants.js";
-
+import { Animation, AnimationController } from "../../systems/Animation.js";
 class Player extends BaseEntity {
     constructor(canvas, gl, { x = 600, y = 400, isLocalPlayer = true } = {}) {
-        const width = 50;
-        const height = 50;
+        const width = 20;
+        const height = 64;
+
         super(x, y, width, height, [0.0, 0.0, 1.0, 1.0], canvas);
-        
+        // this.setScale(2.0)
         this.id = Math.floor(Math.random() * (2 ** 31));
         this.name = "Player" + this.id;
         this.jumpForce = 85525;
@@ -24,11 +25,40 @@ class Player extends BaseEntity {
         this.jumpMomentum = 0;
         this.hasGravity = true;
         this.isLocalPlayer = isLocalPlayer
-        this.init(gl);
+        this.animationController = new AnimationController();
+        this.showHitbox = true
+        this.loadAnimations(gl);
+    }
+
+    async loadAnimations(gl) {
+        // Load idle animation
+        const idleFrames = Array.from({ length: 4 }, (_, i) => `assets/images/man/idle2/_${i}.png`);
+        const idleAnimation = new Animation(gl, idleFrames, 0.2); // 0.2 seconds per frame
+        await idleAnimation.loadFrames(idleFrames)
+        // Load run animation
+        const runFrames = Array.from({ length: 6 }, (_, i) => `assets/images/man/run2/_${i}.png`);
+        const runAnimation = new Animation(gl, runFrames, 0.1); // 0.1 seconds per frame
+        await runAnimation.loadFrames(runFrames)
+        
+        const { height, width } = idleAnimation.frames?.[0] ?? {}
+        console.log('idleAnimation', idleAnimation, idleAnimation.frames?.[0])
+        
+        this.height = 70
+        this.width = 50
+        this.setScale(8)
+        // Add animations to controller
+        this.animationController.addAnimation('idle', idleAnimation);
+        this.animationController.addAnimation('run', runAnimation);
     }
 
     update(deltaTime, allEntities, spatialGrid) {
-        if (this.isLocalPlayer) this.handleMovement(deltaTime, allEntities);
+        if (this.isLocalPlayer) {
+            this.animationController.play('idle');
+            this.handleMovement(deltaTime, allEntities);
+        }
+        // Update current animation
+        this.animationController.update(deltaTime);
+        
         super.update(deltaTime, allEntities, spatialGrid);
     }
 
@@ -80,6 +110,8 @@ class Player extends BaseEntity {
             this.movingStartTime = now;
             this.direction = 1;
             this.runTime += interval;
+            this.animationController.play('run');
+            this.animationController.setFlipped(false)
         } else if (keys['ArrowLeft']) {
             if (this.direction !== -1) {
                 this.runTime = 0;
@@ -87,10 +119,13 @@ class Player extends BaseEntity {
             this.movingStartTime = now;
             this.direction = -1;
             this.runTime += interval;
+            this.animationController.play('run');
+            this.animationController.setFlipped(true)
         } else {
             this.runTime = 0;
             this.movingStartTime = null;
         }
+        // this.animationController.play('idle');
 
         let accelerationIncrease = this.baseAcceleration * this.runTime;
         if (this.movingStartTime !== null) {

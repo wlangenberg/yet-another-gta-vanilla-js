@@ -11,15 +11,18 @@ class BaseEntity extends CollisionCore {
     static {
         this.initialized = false;
         this.vertexBuffer = null;
+        this.textureCoordBuffer = null;
         this.program = null;
         this.positionLocation = null;
+        this.textureCoordLocation = null;
         this.transformMatrixLocation = null;
         this.colorLocation = null;
+        this.samplerLocation = null;
+        this.useTextureLocation = null;
     }
-
     constructor(x, y, width, height, color, canvas) {
         super();
-        this.id = allEntities.length + 1
+        this.id = allEntities.length + 1;
         this.x = x;
         this.y = y;
         this.width = width;
@@ -35,7 +38,7 @@ class BaseEntity extends CollisionCore {
         this.hasGravity = false;
         // Set a default stepHeight (in pixels) for stepping up small ledges.
         this.stepHeight = this.height / 3;
-        this.lastYMovement = 0
+        this.lastYMovement = 0;
         
         // Cache half dimensions for render calculations
         this.halfWidth = width / 2;
@@ -47,6 +50,8 @@ class BaseEntity extends CollisionCore {
         // Sleeping state flag for optimization.
         // When true, the update function returns immediately unless a moving neighbor wakes it.
         this.sleeping = true;
+        this.scale = 1.0; 
+        this.updateDimensions();
     }
 
     init(gl) {
@@ -73,7 +78,21 @@ class BaseEntity extends CollisionCore {
             ]),
             gl.STATIC_DRAW
         );
-
+    
+        // Create and cache texture coordinate buffer
+        BaseEntity.textureCoordBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, BaseEntity.textureCoordBuffer);
+        gl.bufferData(
+            gl.ARRAY_BUFFER,
+            new Float32Array([
+                0.0, 0.0,
+                1.0, 0.0,
+                1.0, 1.0,
+                0.0, 1.0
+            ]),
+            gl.STATIC_DRAW
+        );
+    
         // Create and cache shared shader program
         const program = gl.createProgram();
         gl.attachShader(
@@ -83,9 +102,13 @@ class BaseEntity extends CollisionCore {
                 gl.VERTEX_SHADER,
                 `
                 attribute vec2 position;
+                attribute vec2 aTextureCoord;
                 uniform mat4 transformMatrix;
+                varying vec2 vTextureCoord;
+                
                 void main() {
                     gl_Position = transformMatrix * vec4(position, 0.0, 1.0);
+                    vTextureCoord = aTextureCoord;
                 }
                 `
             )
@@ -98,24 +121,38 @@ class BaseEntity extends CollisionCore {
                 `
                 precision mediump float;
                 uniform vec4 uColor;
+                uniform sampler2D uSampler;
+                uniform bool useTexture;
+                varying vec2 vTextureCoord;
+                
                 void main() {
-                    gl_FragColor = uColor;
+                    if (useTexture) {
+                        vec4 texColor = texture2D(uSampler, vTextureCoord);
+                        if (texColor.a < 0.1) discard;
+                        gl_FragColor = texColor;
+                    } else {
+                        gl_FragColor = uColor;
+                    }
                 }
                 `
             )
         );
         gl.linkProgram(program);
-        
+    
         if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
             console.error('Shader program initialization failed:', gl.getProgramInfoLog(program));
             return;
         }
-
+    
         BaseEntity.program = program;
         BaseEntity.positionLocation = gl.getAttribLocation(program, 'position');
+        BaseEntity.textureCoordLocation = gl.getAttribLocation(program, 'aTextureCoord');
         BaseEntity.transformMatrixLocation = gl.getUniformLocation(program, 'transformMatrix');
         BaseEntity.colorLocation = gl.getUniformLocation(program, 'uColor');
+        BaseEntity.samplerLocation = gl.getUniformLocation(program, 'uSampler');
+        BaseEntity.useTextureLocation = gl.getUniformLocation(program, 'useTexture');
     }
+    
 
     createShader(gl, type, source) {
         const shader = gl.createShader(type);
@@ -157,21 +194,19 @@ class BaseEntity extends CollisionCore {
         }
     }
 
-
     update(interval, allEntities, spatialGrid) {
         if (!this.name) {
             if (Math.abs(this.velocity.x) < 1 && Math.abs(this.velocity.y) < 1) {
-                this.lastYMovement += interval
+                this.lastYMovement += interval;
             } else {
-                this.sleeping = false
+                this.sleeping = false;
             }
             if (this.lastYMovement > 2 && Math.abs(this.velocity.y) < 0.1) {
                 this.sleeping = true;
-                this.grounded = true
-                this.lastYMovement = 0
-                return
+                this.grounded = true;
+                this.lastYMovement = 0;
+                return;
             }              
-
         }
 
         // Only update entities affected by gravity.
@@ -184,14 +219,13 @@ class BaseEntity extends CollisionCore {
         if (this.name) {
             this.handleVelocity(interval, spatialGrid);
         } else {
-            this.handleVelocityOptimized(interval, spatialGrid)
+            this.handleVelocityOptimized(interval, spatialGrid);
         }
         // Apply friction.
         this.applyFriction();
         if (this.name) {
             // If the entity's velocity is negligible after updates, put it to sleep.
             this.resolveOverlap(spatialGrid);
-
         }
     }
 
@@ -234,7 +268,6 @@ class BaseEntity extends CollisionCore {
             this.grounded = true;
         }
     }
-
 
     handleVelocity(interval, spatialGrid) {
         let remainingTime = interval;
@@ -310,8 +343,6 @@ class BaseEntity extends CollisionCore {
                     const v2t = { x: v2.x - v2n * normal.x, y: v2.y - v2n * normal.y };
                     const v1nAfter = (v1n * (m1 - m2) + 2 * m2 * v2n) / (m1 + m2);
                     const v2nAfter = (v2n * (m2 - m1) + 2 * m1 * v1n) / (m1 + m2);
-                    // this.velocity.x = v1t.x + v1nAfter * normal.x;
-                    // this.velocity.y = v1t.y + v1nAfter * normal.y;
                     collisionObject.velocity.x = v2t.x + v2nAfter * normal.x;
                     collisionObject.velocity.y = v2t.y + v2nAfter * normal.y;
                 } else {
@@ -352,28 +383,114 @@ class BaseEntity extends CollisionCore {
         }
     }
 
+    setScale(scale) {
+        this.scale = scale;
+        this.updateDimensions();
+    }
+
     render(viewProjectionMatrix) {
         const gl = this.gl;
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        
         gl.useProgram(BaseEntity.program);
-        
-        // Reset and update model matrix.
+    
+        // Reset and update model matrix
         mat4.identity(modelMatrix);
-        vec3.set(tempVec3, this.x + this.halfWidth, this.y + this.halfHeight, 0);
-        mat4.translate(modelMatrix, modelMatrix, tempVec3);
-        vec3.set(tempVec3, this.width, this.height, 1);
+    
+        // Calculate scaling factors based on the entity's hitbox dimensions
+        let scaleX = this.visualWidth;
+        let scaleY = this.visualHeight;
+    
+        // Handle animation scaling
+        if (this.animationController) {
+            const currentAnimation = this.animationController.animations.get(this.animationController.currentAnimation);
+            const currentFrame = this.animationController.getCurrentFrame();
+            
+            if (currentFrame && currentAnimation) {
+                if (currentFrame.width && currentFrame.height) {
+                    const textureAspectRatio = currentFrame.width / currentFrame.height;
+                    const entityAspectRatio = this.visualWidth / this.visualHeight;
+    
+                    // Adjust scaling to maintain the texture's aspect ratio
+                    if (textureAspectRatio > entityAspectRatio) {
+                        // Texture is wider than the entity, scale height to match
+                        scaleY = this.visualWidth / textureAspectRatio;
+                    } else {
+                        // Texture is taller than the entity, scale width to match
+                        scaleX = this.visualHeight * textureAspectRatio;
+                    }
+    
+                    // Apply animation flipping
+                    if (currentAnimation.flipped) {
+                        scaleX = -scaleX;
+                    }
+                }
+            }
+        }
+
+        if (this.name) {
+            // Position the entity so that the bottom of the texture aligns with the hitbox bottom.
+            vec3.set(tempVec3, this.x + this.halfWidth, this.y + this.halfHeight + 10, 0);
+            mat4.translate(modelMatrix, modelMatrix, tempVec3);
+        } else {
+            // Position the entity so that the bottom of the texture aligns with the hitbox bottom.
+            vec3.set(tempVec3, this.x + this.halfWidth, this.y + this.halfHeight, 0);
+            mat4.translate(modelMatrix, modelMatrix, tempVec3);
+        }
+    
+        // Apply the calculated scaling
+        vec3.set(tempVec3, scaleX, scaleY, 1);
         mat4.scale(modelMatrix, modelMatrix, tempVec3);
-        
-        // Calculate final transform.
+    
+        // Multiply model matrix with view projection matrix
         mat4.multiply(transformMatrix, viewProjectionMatrix, modelMatrix);
-        
-        // Set uniforms and draw.
         gl.uniformMatrix4fv(BaseEntity.transformMatrixLocation, false, transformMatrix);
-        gl.uniform4fv(BaseEntity.colorLocation, this.color);
-        
+    
+        if (this.animationController) {
+            const texture = this.animationController.getCurrentTexture();
+            if (texture) {
+                gl.uniform1i(BaseEntity.useTextureLocation, 1);
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.uniform1i(BaseEntity.samplerLocation, 0);
+            } else {
+                gl.uniform1i(BaseEntity.useTextureLocation, 0);
+                gl.uniform4fv(BaseEntity.colorLocation, this.color);
+            }
+        } else {
+            gl.uniform1i(BaseEntity.useTextureLocation, 0);
+            gl.uniform4fv(BaseEntity.colorLocation, this.color);
+        }
+    
         gl.bindBuffer(gl.ARRAY_BUFFER, BaseEntity.vertexBuffer);
         gl.enableVertexAttribArray(BaseEntity.positionLocation);
         gl.vertexAttribPointer(BaseEntity.positionLocation, 2, gl.FLOAT, false, 0, 0);
+    
+        gl.bindBuffer(gl.ARRAY_BUFFER, BaseEntity.textureCoordBuffer);
+        gl.enableVertexAttribArray(BaseEntity.textureCoordLocation);
+        gl.vertexAttribPointer(BaseEntity.textureCoordLocation, 2, gl.FLOAT, false, 0, 0);
+    
         gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+        
+        gl.disable(gl.BLEND);
+    }
+    updateDimensions() {
+        // Update hitbox dimensions
+        this.halfWidth = this.width / 2;
+        this.halfHeight = this.height / 2;
+        
+        // Update visual dimensions
+        this.visualWidth = this.width * this.scale;
+        this.visualHeight = this.height * this.scale;
+        
+        // Update mass based on physical dimensions
+        this.mass = this.width * this.height;
+    }
+
+    setScale(scale) {
+        this.scale = scale;
+        this.updateDimensions();
     }
 }
 
