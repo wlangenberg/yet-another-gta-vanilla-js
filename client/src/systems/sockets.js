@@ -23,7 +23,7 @@ class Socket {
         this.ws.onclose = (_) => {
             console.log('Connection closed, retrying after 5 seconds');
             setTimeout(() => {
-                ws = new WebSocket(wsUrl);
+                this.ws = new WebSocket(wsUrl);
             }, 5000);
         }
         
@@ -31,7 +31,7 @@ class Socket {
             console.error('Error:', error);
         }
         
-        this.ws.onmessage = (message) => {
+        this.ws.onmessage = async (message) => {
             try {
                 const data = JSON.parse(message.data);
                 if (data.type === 'PlayerUpdate') {
@@ -47,7 +47,7 @@ class Socket {
                     //     }   
                     //     return
                     // }
-                    const player = this.createPlayerFromJson(data?.player);
+                    const player = await this.createPlayerFromJson(data?.player);
                     if (player.id === STATE.myPlayer.id) {
                         return;
                     }
@@ -89,12 +89,14 @@ class Socket {
         }
     }
 
-    createPlayerFromJson(json) {
+    async createPlayerFromJson(json) {
         // console.log(json)
         if (json.name) {
 
             const player = new Player(canvas, gl, { x: json.x, y: json.y, isLocalPlayer: false});
             player.id = json.id;
+            player.init(gl)
+            await player.animationsPromise;
             return player;
         } else {
             // console.log(json.color)

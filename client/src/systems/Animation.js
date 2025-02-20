@@ -8,8 +8,6 @@ export class Animation {
         this.textureLoaded = 0;
         this.totalFrames = frames.length;
         this.flipped = false; // Track flip state
-        
-        console.log('Loading animation frames:', frames);
     }
     loadFrames(frames) {
         return Promise.all(frames.map((framePath, index) => {

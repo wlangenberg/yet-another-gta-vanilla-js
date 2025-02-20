@@ -202,7 +202,6 @@ const run = async () => {
                 }
 				dayNightCycle.update(lastTime);
 				snowSystem.update(fixedTimeStep, snowList, spatialGrid);
-				// socket.updatePlayerState(STATE.myPlayer);
 				accumulatedTime -= fixedTimeStep;
 			}
 
@@ -217,11 +216,8 @@ const run = async () => {
 			batchRenderer.begin();
 			for (let i = 0; i < allEntities.length; i++) {
 				const entity = allEntities[i];
-				if (entity.render && !(entity instanceof SunWebGL) && !(entity instanceof Player) && isEntityVisible(entity, camera)) {
+				if (entity.render && !(entity instanceof SunWebGL) && isEntityVisible(entity, camera)) {
 					batchRenderer.submit(entity);
-				}
-				if (entity instanceof Player) {
-					entity.render(camera.getViewMatrix())
 				}
 			}
 			batchRenderer.flush(viewProjectionMatrix);

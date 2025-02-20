@@ -7,7 +7,7 @@ class Player extends BaseEntity {
         const width = 20;
         const height = 64;
 
-        super(x, y, width, height, [0.0, 0.0, 1.0, 1.0], canvas);
+        super(x, y, width, height, [1.0, 1.0, 1.0, 1.0], canvas);
         // this.setScale(2.0)
         this.id = Math.floor(Math.random() * (2 ** 31));
         this.name = "Player" + this.id;
@@ -27,7 +27,7 @@ class Player extends BaseEntity {
         this.isLocalPlayer = isLocalPlayer
         this.animationController = new AnimationController();
         this.showHitbox = true
-        this.loadAnimations(gl);
+        this.animationsPromise = this.loadAnimations(gl)
     }
 
     async loadAnimations(gl) {
@@ -41,7 +41,6 @@ class Player extends BaseEntity {
         await runAnimation.loadFrames(runFrames)
         
         const { height, width } = idleAnimation.frames?.[0] ?? {}
-        console.log('idleAnimation', idleAnimation, idleAnimation.frames?.[0])
         
         this.height = 70
         this.width = 50

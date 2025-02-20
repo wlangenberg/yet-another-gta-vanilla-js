@@ -167,6 +167,7 @@ class BaseEntity extends CollisionCore {
         
         return shader;
     }
+
     resolveOverlap(spatialGrid) {
         const nearbyObjects = spatialGrid.query(this);
         for (const obj of nearbyObjects) {
@@ -201,7 +202,7 @@ class BaseEntity extends CollisionCore {
             } else {
                 this.sleeping = false;
             }
-            if (this.lastYMovement > 2 && Math.abs(this.velocity.y) < 0.1) {
+            if (this.lastYMovement > 3 && Math.abs(this.velocity.y) < 0.1) {
                 this.sleeping = true;
                 this.grounded = true;
                 this.lastYMovement = 0;
