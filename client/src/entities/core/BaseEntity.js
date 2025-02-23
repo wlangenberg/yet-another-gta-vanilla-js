@@ -60,8 +60,8 @@ class BaseEntity extends CollisionCore {
         // Initialize attachment properties
         this.attachedTo = null;
         this.attachmentOffset = { x: 0, y: 0 };
-        this.renderLayer = 0; // Default layer
-        this.defaultLayer = 0; // Store the default layer for this entity
+        this.renderLayer = 1; // Default layer
+        this.defaultLayer = 1; // Store the default layer for this entity
         this.rotation = 0;
         this.updateDimensions();
     }
@@ -421,92 +421,8 @@ class BaseEntity extends CollisionCore {
         this.updateDimensions();
     }
 
-    render(viewProjectionMatrix) {
-        const gl = this.gl;
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-        
-        gl.useProgram(BaseEntity.program);
-    
-        // Reset and update model matrix
-        mat4.identity(modelMatrix);
-    
-        // Calculate scaling factors based on the entity's hitbox dimensions
-        let scaleX = this.visualWidth;
-        let scaleY = this.visualHeight;
-    
-        // Handle animation scaling
-        if (this.animationController) {
-            const currentAnimation = this.animationController.animations.get(this.animationController.currentAnimation);
-            const currentFrame = this.animationController.getCurrentFrame();
-            
-            if (currentFrame && currentAnimation) {
-                if (currentFrame.width && currentFrame.height) {
-                    const textureAspectRatio = currentFrame.width / currentFrame.height;
-                    const entityAspectRatio = this.visualWidth / this.visualHeight;
-    
-                    if (textureAspectRatio > entityAspectRatio) {
-                        scaleY = this.visualWidth / textureAspectRatio;
-                    } else {
-                        scaleX = this.visualHeight * textureAspectRatio;
-                    }
-    
-                    if (currentAnimation.flipped) {
-                        scaleX = -scaleX;
-                    }
-                }
-            }
-        }
 
-        // Position translation
-        if (this.name) {
-            vec3.set(tempVec3, this.x + this.halfWidth, this.y + this.halfHeight + 10, 0);
-        } else {
-            vec3.set(tempVec3, this.x + this.halfWidth, this.y + this.halfHeight, 0);
-        }
-        mat4.translate(modelMatrix, modelMatrix, tempVec3);
 
-        // Apply rotation if it exists
-        if (this.rotation) {
-            mat4.rotateZ(modelMatrix, modelMatrix, this.rotation);
-        }
-    
-        // Apply the calculated scaling
-        vec3.set(tempVec3, scaleX, scaleY, 1);
-        mat4.scale(modelMatrix, modelMatrix, tempVec3);
-    
-        // Multiply model matrix with view projection matrix
-        mat4.multiply(transformMatrix, viewProjectionMatrix, modelMatrix);
-        gl.uniformMatrix4fv(BaseEntity.transformMatrixLocation, false, transformMatrix);
-    
-        if (this.animationController) {
-            const texture = this.animationController.getCurrentTexture();
-            if (texture) {
-                gl.uniform1i(BaseEntity.useTextureLocation, 1);
-                gl.activeTexture(gl.TEXTURE0);
-                gl.bindTexture(gl.TEXTURE_2D, texture);
-                gl.uniform1i(BaseEntity.samplerLocation, 0);
-            } else {
-                gl.uniform1i(BaseEntity.useTextureLocation, 0);
-                gl.uniform4fv(BaseEntity.colorLocation, this.color);
-            }
-        } else {
-            gl.uniform1i(BaseEntity.useTextureLocation, 0);
-            gl.uniform4fv(BaseEntity.colorLocation, this.color);
-        }
-    
-        gl.bindBuffer(gl.ARRAY_BUFFER, BaseEntity.vertexBuffer);
-        gl.enableVertexAttribArray(BaseEntity.positionLocation);
-        gl.vertexAttribPointer(BaseEntity.positionLocation, 2, gl.FLOAT, false, 0, 0);
-    
-        gl.bindBuffer(gl.ARRAY_BUFFER, BaseEntity.textureCoordBuffer);
-        gl.enableVertexAttribArray(BaseEntity.textureCoordLocation);
-        gl.vertexAttribPointer(BaseEntity.textureCoordLocation, 2, gl.FLOAT, false, 0, 0);
-    
-        gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
-        
-        gl.disable(gl.BLEND);
-    }
     updateDimensions() {
         // Update hitbox dimensions
         this.halfWidth = this.width / 2;
@@ -520,10 +436,6 @@ class BaseEntity extends CollisionCore {
         this.mass = this.width * this.height;
     }
 
-    setScale(scale) {
-        this.scale = scale;
-        this.updateDimensions();
-    }
 }
 
 export { BaseEntity };

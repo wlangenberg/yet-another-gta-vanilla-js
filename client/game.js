@@ -228,14 +228,13 @@ const run = async () => {
 
 			for (let currentLayer = LAYERS.BACKGROUND; currentLayer <= LAYERS.FOREGROUND; currentLayer++) {
 				batchRenderer.begin();
-				
+				if (sun.renderLayer === currentLayer) batchRenderer.submit(sun);
+
 				// Filter entities by current layer
 				for (let i = 0; i < allEntities.length; i++) {
 					const entity = allEntities[i];
 					if (
-						entity.render && 
 						entity.renderLayer === currentLayer && 
-						!(entity instanceof SunWebGL) && 
 						isEntityVisible(entity, camera)
 					) {
 						batchRenderer.submit(entity);

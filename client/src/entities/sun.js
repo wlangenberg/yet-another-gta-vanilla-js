@@ -13,6 +13,7 @@ class SunWebGL extends BaseEntity {
         this.cachedQuads = []
         // Viewport bounds for culling
         this.viewportBounds = { left: 0, right: 0, top: 0, bottom: 0 }
+        this.renderLayer = 0
         this.initShaders()
         this.initBuffers()
     }
@@ -146,7 +147,7 @@ class SunWebGL extends BaseEntity {
     }
 
     updateViewportBounds(camera) {
-        const extraBound = 350
+        const extraBound = 2350
         // Only calculate shadows for objects strictly within the camera view.
         this.viewportBounds = {
             left: camera.x - extraBound,
@@ -373,7 +374,6 @@ class SunWebGL extends BaseEntity {
     }
 
     render(dt, allGameObjects, spatialGrid, camera) {
-        super.render(camera.getViewMatrix())
         this.cameraPos.x = camera.x
         this.cameraPos.y = camera.y
         this.frameCount++
@@ -428,6 +428,9 @@ class SunWebGL extends BaseEntity {
         gl.stencilOp(gl.REPLACE, gl.REPLACE, gl.REPLACE); // Replace stencil buffer value
         gl.colorMask(false, false, false, false); // Disable color writing
     
+        // Disable depth writing to preserve the entity depth values
+        gl.depthMask(false);
+    
         // Bind shadow buffer and upload vertex data
         gl.bindBuffer(gl.ARRAY_BUFFER, this.shadowBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW);
@@ -444,15 +447,17 @@ class SunWebGL extends BaseEntity {
         const ortho = this.computeOrthoMatrix();
         gl.uniformMatrix4fv(this.matrixLoc, false, ortho);
     
-        // Draw shadow geometry
+        // Draw shadow geometry (stencil gets updated but depth buffer remains unchanged)
         gl.drawArrays(gl.TRIANGLES, 0, vertices.length / 3);
+    
+        // Re-enable depth writing now that the stencil is set up
+        gl.depthMask(true);
     
         // Step 2: Darken areas marked in the stencil buffer only on objects
         gl.colorMask(true, true, true, true); // Enable color writing
         gl.stencilFunc(gl.EQUAL, 1, 0xFF); // Only render where stencil value is 1
         gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP); // Keep stencil values
-        // Use depth testing to ensure shadows are applied only on objects
-        gl.depthFunc(gl.GREATER);
+        gl.depthFunc(gl.GREATER); // Only affect pixels with a depth less than 1.0 (i.e. where entities are)
         gl.enable(gl.BLEND); // Enable blending for darkening effect
         gl.blendFunc(gl.ZERO, gl.SRC_COLOR); // Multiply existing color with shadow factor
     
@@ -481,7 +486,7 @@ class SunWebGL extends BaseEntity {
         const shadowFactorLoc = gl.getUniformLocation(this.quadProgram, "u_shadowFactor");
         gl.uniform1f(shadowFactorLoc, 0.4); // Darken by 40%
     
-        // Draw full-screen quad
+        // Draw full-screen quad (only affecting areas where entities exist)
         gl.drawArrays(gl.TRIANGLES, 0, 6);
     
         // Restore default state
@@ -489,6 +494,7 @@ class SunWebGL extends BaseEntity {
         gl.disable(gl.BLEND);
         gl.depthFunc(gl.LEQUAL); // Re-enable default depth testing for other rendering
     }
+    
 }
 
 export default SunWebGL
