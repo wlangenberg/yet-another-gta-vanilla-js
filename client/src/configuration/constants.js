@@ -25,4 +25,12 @@ canvas.height = window.innerHeight;
 const STATE = {
     myPlayer: null,
 }
-export { keys, gravity, canvas, ctx, allEntities, DAY_LENGTH, SUN_NIGHT_THRESHOLD, STATE };
+
+const LAYERS = {
+    BACKGROUND: 0,
+    WORLD: 1,
+    PLAYER: 2,
+    FOREGROUND: 3
+};
+
+export { keys, gravity, canvas, ctx, allEntities, DAY_LENGTH, SUN_NIGHT_THRESHOLD, STATE, LAYERS };

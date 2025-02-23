@@ -1,14 +1,16 @@
+#!/usr/bin/env node
 import { BaseEntity } from "../core/BaseEntity.js";
 import Fragment from "../fragments/Fragment.js";
-import { keys } from "../../configuration/constants.js";
+import Gun from "./Gun.js"; // Import the new Gun class
+import { keys, ctx as gl, allEntities, canvas, STATE, LAYERS } from "../../configuration/constants.js";
 import { Animation, AnimationController } from "../../systems/Animation.js";
+
 class Player extends BaseEntity {
     constructor(canvas, gl, { x = 600, y = 400, isLocalPlayer = true } = {}) {
         const width = 20;
         const height = 64;
 
         super(x, y, width, height, [1.0, 1.0, 1.0, 1.0], canvas);
-        // this.setScale(2.0)
         this.id = Math.floor(Math.random() * (2 ** 31));
         this.name = "Player" + this.id;
         this.jumpForce = 85525;
@@ -28,6 +30,48 @@ class Player extends BaseEntity {
         this.animationController = new AnimationController();
         this.showHitbox = true
         this.animationsPromise = this.loadAnimations(gl)
+        this.equippedWeapon = null;
+        this.renderLayer = 1;
+        this.mousePosition = { x: 0, y: 0 };
+        this.worldMousePosition = { x: 0, y: 0 };
+        this.shooting = false
+        if (this.isLocalPlayer) {
+            this.setupMouseTracking();
+            this.setupShooting();
+            this.setupCursorChange();
+        }
+    }
+
+    setupCursorChange() {
+        window.addEventListener('mousemove', () => {
+            if (this.equippedWeapon) {
+                canvas.style.cursor = 'crosshair'; // Change cursor to aim when a weapon is equipped
+            } else {
+                canvas.style.cursor = 'default'; // Reset cursor to default when no weapon is equipped
+            }
+        });
+    }
+
+    setupMouseTracking() {
+        window.addEventListener('mousemove', (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            this.mousePosition = {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+            this.updateWorldMousePosition();
+        });
+    }
+
+    updateWorldMousePosition() {
+        // Get the camera position from the game's camera
+        const camera = window.camera;
+        
+        // Convert screen coordinates to world coordinates
+        this.worldMousePosition = {
+            x: this.mousePosition.x + camera.x,
+            y: this.mousePosition.y + camera.y
+        };
     }
 
     async loadAnimations(gl) {
@@ -35,6 +79,7 @@ class Player extends BaseEntity {
         const idleFrames = Array.from({ length: 4 }, (_, i) => `assets/images/man/idle2/_${i}.png`);
         const idleAnimation = new Animation(gl, idleFrames, 0.2); // 0.2 seconds per frame
         await idleAnimation.loadFrames(idleFrames)
+        
         // Load run animation
         const runFrames = Array.from({ length: 6 }, (_, i) => `assets/images/man/run2/_${i}.png`);
         const runAnimation = new Animation(gl, runFrames, 0.1); // 0.1 seconds per frame
@@ -50,14 +95,32 @@ class Player extends BaseEntity {
         this.animationController.addAnimation('run', runAnimation);
     }
 
+    setupShooting() {
+        window.addEventListener('mousedown', (e) => {
+            // e.button === 0 indicates a left mouse click.
+            if (e.button === 0) {
+                this.shooting = true
+            }
+        });
+        window.addEventListener('mouseup', (e) => {
+            // e.button === 0 indicates a left mouse click.
+            if (e.button === 0) {
+              this.shooting = false
+            }
+          });
+    }
+
     update(deltaTime, allEntities, spatialGrid) {
         if (this.isLocalPlayer) {
-            this.animationController.play('idle');
             this.handleMovement(deltaTime, allEntities);
+            this.handleWeaponPickup(allEntities);
+            this.updateWorldMousePosition(); // Update world mouse position every frame
+            this.updateGunRotation();
+            if (this.shooting) {
+                this.shoot();
+            }
         }
-        // Update current animation
         this.animationController.update(deltaTime);
-        
         super.update(deltaTime, allEntities, spatialGrid);
     }
 
@@ -69,45 +132,11 @@ class Player extends BaseEntity {
             this.grounded = false;
         }
 
-        if (keys['Space']) {
-            const playerX = this.x + this.width / 2;
-            const playerY = this.y + this.height / 2;
-            const radius = 180;
-            // Iterate backwards so removals don't affect the loop index.
-            for (let i = entities.length - 1; i >= 0; i--) {
-                const entity = entities[i];
-                if (entity === this || entity?.enableLife) continue;
-                // Check that the entity has x, y, width, and height defined.
-                if (typeof entity.x !== "number" || typeof entity.y !== "number") continue;
-                const entityX = entity.x + entity.width / 2;
-                const entityY = entity.y + entity.height / 2;
-                const distance = Math.sqrt((playerX - entityX) ** 2 + (playerY - entityY) ** 2);
-                // if (distance < radius) {
-                //     // Remove the entity and split it into fragments.
-                //     entities.splice(i, 1);
-                //     const fragments = this.splitEntity(entity);
-                //     entities.push(...fragments);
-                //     break
-                // } else if (distance < (radius + 40)) {
-                //     entity.hasGravity = true;
-                // }
-                if (distance < radius) {
-                    entity.velocity.x += (Math.random() - 0.9) * 1112;
-                    entity.velocity.y += (Math.random() - 0.9) * 1112;
-                    entity.hasGravity = true;
-                    entity.type = 'fragment'
-                    // entity.enableLife = true
-                }
-            }
-        }
-
-        const now = performance.now();
-
         if (keys['ArrowRight']) {
             if (this.direction !== 1) {
                 this.runTime = 0;
             }
-            this.movingStartTime = now;
+            this.movingStartTime = performance.now();
             this.direction = 1;
             this.runTime += interval;
             this.animationController.play('run');
@@ -116,7 +145,7 @@ class Player extends BaseEntity {
             if (this.direction !== -1) {
                 this.runTime = 0;
             }
-            this.movingStartTime = now;
+            this.movingStartTime = performance.now();
             this.direction = -1;
             this.runTime += interval;
             this.animationController.play('run');
@@ -124,8 +153,8 @@ class Player extends BaseEntity {
         } else {
             this.runTime = 0;
             this.movingStartTime = null;
+            this.animationController.play('idle');
         }
-        // this.animationController.play('idle');
 
         let accelerationIncrease = this.baseAcceleration * this.runTime;
         if (this.movingStartTime !== null) {
@@ -138,6 +167,104 @@ class Player extends BaseEntity {
         } else if (this.direction === -1) {
             this.velocity.x -= acceleration;
             if (this.velocity.x < -this.maxSpeed) this.velocity.x = -this.maxSpeed;
+        }
+    }
+
+    updateGunRotation() {
+        if (this.equippedWeapon) {
+            // Determine attachment parameters and base angle based on player's direction.
+            let attachmentOffset, scaleX, scaleY, baseAngle;
+            if (this.direction === 1) { // Facing right.
+                attachmentOffset = { x: 10, y: this.height / 4 };
+                scaleX = 2;
+                scaleY = 2;
+                baseAngle = 0;
+                this.equippedWeapon.animationController.setFlipped(false);
+            } else { // Facing left.
+                attachmentOffset = { x: -10, y: this.height /4 };
+                scaleX = 2;
+                scaleY = 2; // Use positive scale; rely on sprite flipping.
+                baseAngle = Math.PI;
+                this.equippedWeapon.animationController.setFlipped(true);
+            }
+            
+            // Update the gun's attachment parameters.
+            this.equippedWeapon.attachmentOffset = attachmentOffset;
+            this.equippedWeapon.setScale(scaleX, scaleY);
+            
+            // Compute the gun's world position using the updated offset.
+            const gunX = this.x + attachmentOffset.x;
+            const gunY = this.y + attachmentOffset.y + this.height / 4;
+
+            
+            // Calculate the raw angle from the gun to the mouse.
+            const angle = Math.atan2(this.worldMousePosition.y - gunY, this.worldMousePosition.x - gunX);
+            
+            // Compute the relative angle between the raw angle and the player's base angle using a robust method.
+            let relativeAngle = Math.atan2(Math.sin(angle - baseAngle), Math.cos(angle - baseAngle));
+            
+            // Clamp the relative angle so that it stays within -90° to +90° (i.e. -π/2 to π/2).
+            relativeAngle = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, relativeAngle));
+            
+            // The final gun angle is the base angle plus the clamped relative angle.
+            const finalAngle = baseAngle + relativeAngle;
+            this.equippedWeapon.rotation = finalAngle;
+        }
+    }
+
+    handleWeaponPickup(entities) {
+        const playerX = this.x + this.width / 2;
+        const playerY = this.y + this.height / 2;
+        const radius = 80;
+
+        for (let i = entities.length - 1; i >= 0; i--) {
+            const entity = entities[i];
+            if (entity instanceof Gun && typeof entity.x === "number" && typeof entity.y === "number") {
+                const entityX = entity.x + entity.width / 2;
+                const entityY = entity.y + entity.height / 2;
+                const distance = Math.sqrt((playerX - entityX) ** 2 + (playerY - entityY) ** 2);
+
+                if (distance < radius && this.equippedWeapon !== entity) {
+                    this.equippedWeapon = entity;
+                    this.pickupItem(entity)
+                    entity.gravity = false
+                    entity.sleep = true
+                    entity.type = 'background'
+                    // entities.splice(i, 1);
+                    break;
+                }
+            }
+        }
+    }
+
+    pickupItem(item) {
+        if (this.equippedWeapon) {
+            // Detach the current weapon
+            this.equippedWeapon.attachedTo = null;
+        }
+        this.equippedWeapon = item;
+        if (item) {
+            // Attach the new weapon to the player's hand
+            item.attachedTo = this;
+            item.attachmentOffset = { x: 30, y: -20 }; // Adjust these values based on your art
+        }
+
+        if (item instanceof Gun) {
+            item.onPickup(this);
+        }
+    }
+
+    dropItem(item) {
+        if (item instanceof Gun) {
+            item.onDrop();
+        }
+    }
+
+    shoot() {
+        if (this.equippedWeapon) {
+            this.equippedWeapon.shoot(); // Call the shoot method of the equipped weapon
+        } else {
+            console.log('No weapon equipped');
         }
     }
 
@@ -167,5 +294,4 @@ class Player extends BaseEntity {
         return fragments;
     }
 }
-
 export default Player;

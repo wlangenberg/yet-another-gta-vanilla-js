@@ -6,6 +6,8 @@ class Platform extends BaseEntity {
 		// Platform width: 100, height: 50, color: green
 		super(x, y, width, height, color ?? [0.0, 1.0, 0.0, 1.0], canvas, type)
 		this.isGround = true
+		this.hasGravity = false
+		this.hasCollision = true
 	}
 
     update(deltaTime, allEntites, spatialGrid) {

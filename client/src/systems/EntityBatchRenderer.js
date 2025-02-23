@@ -1,3 +1,5 @@
+import Gun from "../entities/player/Gun.js";
+
 class EntityBatchRenderer {
     constructor(gl) {
         this.gl = gl;
@@ -8,7 +10,7 @@ class EntityBatchRenderer {
                 throw new Error("Instancing not supported in this browser");
             }
         }
-        this.instances = [];
+        this.instances = new Map(); // Map of texture to instances
         // Create a vertex buffer for a unit quad.
         this.vertexBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
@@ -123,107 +125,109 @@ class EntityBatchRenderer {
 
     // Begin a new batch.
     begin() {
-        this.instances = [];
+        this.instances.clear();
     }
 
     // Submit an entity. This now checks for an animation texture.
     submit(entity) {
         const transform = mat4.create();
     
-        // Determine vertical offset (if the entity has a 'name', we add an offset like in BaseEntity.render)
+        // Compute the center position
         const offsetY = entity.name ? 10 : 0;
-    
-        // Calculate translation: position at the center of the hitbox (with offset if applicable)
         const tx = entity.x + entity.halfWidth;
         const ty = entity.y + entity.halfHeight + offsetY;
         mat4.translate(transform, transform, [tx, ty, 0]);
     
-        // Start with visual dimensions (which incorporate scale, set via setScale)
+        // Apply rotation if available (rotates around the entity center, since the quad is centered at (0,0))
+        if (entity.rotation) {
+            mat4.rotateZ(transform, transform, entity.rotation);
+        }
+    
+        // Determine scaling based on the entity's visual dimensions and animation properties.
         let scaleX = entity.visualWidth;
         let scaleY = entity.visualHeight;
-    
-        // Adjust scaling based on the current animation (if any)
+        
+        let texture = null;
         if (entity.animationController) {
             const currentAnimation = entity.animationController.animations.get(entity.animationController.currentAnimation);
             const currentFrame = entity.animationController.getCurrentFrame();
-            if (currentFrame && currentAnimation && currentFrame.width && currentFrame.height) {
-                const textureAspectRatio = currentFrame.width / currentFrame.height;
-                const entityAspectRatio = entity.visualWidth / entity.visualHeight;
-    
-                // Adjust scaling to maintain the texture's aspect ratio
-                if (textureAspectRatio > entityAspectRatio) {
-                    // Texture is wider than the entity, scale height to match.
-                    scaleY = entity.visualWidth / textureAspectRatio;
-                } else {
-                    // Texture is taller than the entity, scale width to match.
-                    scaleX = entity.visualHeight * textureAspectRatio;
-                }
-                // Apply flipping if needed.
-                if (currentAnimation.flipped) {
-                    scaleX = -scaleX;
+            
+            if (currentFrame && currentAnimation) {
+                texture = entity.animationController.getCurrentTexture();
+                
+                if (currentFrame.width && currentFrame.height) {
+                    const textureAspectRatio = currentFrame.width / currentFrame.height;
+                    const entityAspectRatio = entity.visualWidth / entity.visualHeight;
+        
+                    if (textureAspectRatio > entityAspectRatio) {
+                        scaleY = entity.visualWidth / textureAspectRatio;
+                    } else {
+                        scaleX = entity.visualHeight * textureAspectRatio;
+                    }
+                    
+                    if (currentAnimation.flipped && entity instanceof Gun) {
+                        scaleY = -scaleY;
+                    } else if (currentAnimation.flipped) {
+                        scaleX = -scaleX;
+                    }
                 }
             }
         }
-    
-        // Apply the calculated scaling to the transform matrix.
+        
+        // Apply scaling after rotation.
         mat4.scale(transform, transform, [scaleX, scaleY, 1]);
     
-        // Get the current texture if using animations.
-        let texture = null;
-        if (entity.animationController) {
-            texture = entity.animationController.getCurrentTexture();
+        // Group instances by texture
+        const textureKey = texture || 'no_texture';
+        if (!this.instances.has(textureKey)) {
+            this.instances.set(textureKey, []);
         }
-    
-        // Store the computed transform matrix along with the entity's color and texture.
-        this.instances.push({
+        
+        this.instances.get(textureKey).push({
             matrix: transform,
-            color: entity.color, // Expected to be a Float32Array with 4 elements.
+            color: entity.color,
             texture: texture
         });
     }
     
+    
 
-    // Flush all submitted instances by grouping those that use textures from those that do not.
     flush(viewProjectionMatrix) {
-        // Group instances into textured and non-textured.
-        const texturedInstances = this.instances.filter(inst => inst.texture);
-        const nonTexturedInstances = this.instances.filter(inst => !inst.texture);
-        
-        if (texturedInstances.length > 0) {
-            // Here we assume for simplicity that all textured instances use the same texture.
-            // For multiple textures, you would group further by texture.
-            this.drawInstances(viewProjectionMatrix, texturedInstances, true, texturedInstances[0].texture);
-        }
-        if (nonTexturedInstances.length > 0) {
-            this.drawInstances(viewProjectionMatrix, nonTexturedInstances, false, null);
+        // Render each group of instances with the same texture
+        for (const [textureKey, instances] of this.instances) {
+            if (instances.length > 0) {
+                const useTexture = textureKey !== 'no_texture';
+                this.drawInstances(viewProjectionMatrix, instances, useTexture, instances[0].texture);
+            }
         }
     }
 
-    // Helper function to draw a set of instances.
     drawInstances(viewProjectionMatrix, instances, useTexture, texture) {
         const gl = this.gl;
         gl.useProgram(this.program);
 
-        // Bind the quad vertex buffer.
+        // Bind vertex buffer and set attributes
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
         const posLoc = gl.getAttribLocation(this.program, 'aPosition');
         gl.enableVertexAttribArray(posLoc);
         gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
 
+        // Prepare instance data
         const numInstances = instances.length;
-        // Each instance uses 20 floats: 16 for the matrix and 4 for the color.
         const instanceData = new Float32Array(numInstances * 20);
         for (let i = 0; i < numInstances; i++) {
             instanceData.set(instances[i].matrix, i * 20);
             instanceData.set(instances[i].color, i * 20 + 16);
         }
 
+        // Buffer instance data
         gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.DYNAMIC_DRAW);
 
-        const stride = 20 * 4; // 20 floats per instance * 4 bytes per float.
+        const stride = 20 * 4;
 
         if (this.useWebGL2) {
+            // Set up WebGL2 attributes
             const matrixLoc = gl.getAttribLocation(this.program, 'aInstanceMatrix');
             for (let i = 0; i < 4; i++) {
                 const loc = matrixLoc + i;
@@ -235,58 +239,60 @@ class EntityBatchRenderer {
             gl.enableVertexAttribArray(colorLoc);
             gl.vertexAttribPointer(colorLoc, 4, gl.FLOAT, false, stride, 16 * 4);
             gl.vertexAttribDivisor(colorLoc, 1);
-            // Set uniforms.
-            gl.uniformMatrix4fv(gl.getUniformLocation(this.program, 'uViewProjectionMatrix'), false, viewProjectionMatrix);
-            gl.uniform1i(gl.getUniformLocation(this.program, 'uUseTexture'), useTexture ? 1 : 0);
-            if (useTexture && texture) {
-                gl.activeTexture(gl.TEXTURE0);
-                gl.bindTexture(gl.TEXTURE_2D, texture);
-                gl.uniform1i(gl.getUniformLocation(this.program, 'uSampler'), 0);
-            }
-            gl.drawArraysInstanced(gl.TRIANGLE_FAN, 0, 4, numInstances);
-            // Reset divisors.
-            for (let i = 0; i < 4; i++) {
-                gl.vertexAttribDivisor(matrixLoc + i, 0);
-            }
-            gl.vertexAttribDivisor(colorLoc, 0);
         } else {
-            // WebGL1 with ANGLE_instanced_arrays.
+            // Set up WebGL1 attributes with ANGLE extension
             const ext = this.instancingExt;
             const matrixLoc0 = gl.getAttribLocation(this.program, 'aInstanceMatrix0');
             const matrixLoc1 = gl.getAttribLocation(this.program, 'aInstanceMatrix1');
             const matrixLoc2 = gl.getAttribLocation(this.program, 'aInstanceMatrix2');
             const matrixLoc3 = gl.getAttribLocation(this.program, 'aInstanceMatrix3');
-            ext.vertexAttribDivisorANGLE(matrixLoc0, 1);
-            ext.vertexAttribDivisorANGLE(matrixLoc1, 1);
-            ext.vertexAttribDivisorANGLE(matrixLoc2, 1);
-            ext.vertexAttribDivisorANGLE(matrixLoc3, 1);
             const colorLoc = gl.getAttribLocation(this.program, 'aInstanceColor');
-            ext.vertexAttribDivisorANGLE(colorLoc, 1);
-            // Set up the attributes.
-            gl.vertexAttribPointer(matrixLoc0, 4, gl.FLOAT, false, stride, 0);
-            gl.enableVertexAttribArray(matrixLoc0);
-            gl.vertexAttribPointer(matrixLoc1, 4, gl.FLOAT, false, stride, 16);
-            gl.enableVertexAttribArray(matrixLoc1);
-            gl.vertexAttribPointer(matrixLoc2, 4, gl.FLOAT, false, stride, 32);
-            gl.enableVertexAttribArray(matrixLoc2);
-            gl.vertexAttribPointer(matrixLoc3, 4, gl.FLOAT, false, stride, 48);
-            gl.enableVertexAttribArray(matrixLoc3);
-            gl.vertexAttribPointer(colorLoc, 4, gl.FLOAT, false, stride, 64);
-            gl.enableVertexAttribArray(colorLoc);
-            gl.uniformMatrix4fv(gl.getUniformLocation(this.program, 'uViewProjectionMatrix'), false, viewProjectionMatrix);
-            gl.uniform1i(gl.getUniformLocation(this.program, 'uUseTexture'), useTexture ? 1 : 0);
-            if (useTexture && texture) {
-                gl.activeTexture(gl.TEXTURE0);
-                gl.bindTexture(gl.TEXTURE_2D, texture);
-                gl.uniform1i(gl.getUniformLocation(this.program, 'uSampler'), 0);
+
+            // Enable attributes and set divisors
+            [matrixLoc0, matrixLoc1, matrixLoc2, matrixLoc3, colorLoc].forEach((loc, i) => {
+                gl.enableVertexAttribArray(loc);
+                gl.vertexAttribPointer(loc, 4, gl.FLOAT, false, stride, i * 16);
+                ext.vertexAttribDivisorANGLE(loc, 1);
+            });
+        }
+
+        // Set uniforms
+        gl.uniformMatrix4fv(gl.getUniformLocation(this.program, 'uViewProjectionMatrix'), false, viewProjectionMatrix);
+        gl.uniform1i(gl.getUniformLocation(this.program, 'uUseTexture'), useTexture ? 1 : 0);
+
+        // Set up texturing
+        if (useTexture && texture) {
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.uniform1i(gl.getUniformLocation(this.program, 'uSampler'), 0);
+        }
+
+        // Draw instances
+        if (this.useWebGL2) {
+            gl.drawArraysInstanced(gl.TRIANGLE_FAN, 0, 4, numInstances);
+        } else {
+            this.instancingExt.drawArraysInstancedANGLE(gl.TRIANGLE_FAN, 0, 4, numInstances);
+        }
+
+        // Clean up
+        if (this.useWebGL2) {
+            const matrixLoc = gl.getAttribLocation(this.program, 'aInstanceMatrix');
+            const colorLoc = gl.getAttribLocation(this.program, 'aInstanceColor');
+            for (let i = 0; i < 4; i++) {
+                gl.vertexAttribDivisor(matrixLoc + i, 0);
             }
-            ext.drawArraysInstancedANGLE(gl.TRIANGLE_FAN, 0, 4, numInstances);
-            // Reset divisors.
-            ext.vertexAttribDivisorANGLE(matrixLoc0, 0);
-            ext.vertexAttribDivisorANGLE(matrixLoc1, 0);
-            ext.vertexAttribDivisorANGLE(matrixLoc2, 0);
-            ext.vertexAttribDivisorANGLE(matrixLoc3, 0);
-            ext.vertexAttribDivisorANGLE(colorLoc, 0);
+            gl.vertexAttribDivisor(colorLoc, 0);
+        } else {
+            const locations = [
+                gl.getAttribLocation(this.program, 'aInstanceMatrix0'),
+                gl.getAttribLocation(this.program, 'aInstanceMatrix1'),
+                gl.getAttribLocation(this.program, 'aInstanceMatrix2'),
+                gl.getAttribLocation(this.program, 'aInstanceMatrix3'),
+                gl.getAttribLocation(this.program, 'aInstanceColor')
+            ];
+            locations.forEach(loc => {
+                this.instancingExt.vertexAttribDivisorANGLE(loc, 0);
+            });
         }
     }
 }

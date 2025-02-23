@@ -20,6 +20,10 @@ class BaseEntity extends CollisionCore {
         this.samplerLocation = null;
         this.useTextureLocation = null;
     }
+
+    // Attachment properties
+    attachedTo = null;
+    attachmentOffset = { x: 0, y: 0 };
     constructor(x, y, width, height, color, canvas, type) {
         super();
         this.id = allEntities.length + 1;
@@ -35,7 +39,8 @@ class BaseEntity extends CollisionCore {
         this.airFriction = 0.85;
         this.gravity = gravity;
         this.grounded = true;
-        this.hasGravity = false;
+        this.hasGravity = true;
+        this.hasCollision = true
         // Set a default stepHeight (in pixels) for stepping up small ledges.
         this.stepHeight = this.height / 3;
         this.lastYMovement = 0;
@@ -51,6 +56,13 @@ class BaseEntity extends CollisionCore {
         // When true, the update function returns immediately unless a moving neighbor wakes it.
         this.sleeping = true;
         this.scale = 1.0; 
+
+        // Initialize attachment properties
+        this.attachedTo = null;
+        this.attachmentOffset = { x: 0, y: 0 };
+        this.renderLayer = 0; // Default layer
+        this.defaultLayer = 0; // Store the default layer for this entity
+        this.rotation = 0;
         this.updateDimensions();
     }
 
@@ -152,6 +164,14 @@ class BaseEntity extends CollisionCore {
         BaseEntity.samplerLocation = gl.getUniformLocation(program, 'uSampler');
         BaseEntity.useTextureLocation = gl.getUniformLocation(program, 'useTexture');
     }
+
+    setRenderLayer(layer) {
+        this.renderLayer = layer;
+    }
+
+    resetRenderLayer() {
+        this.renderLayer = this.defaultLayer;
+    }
     
 
     createShader(gl, type, source) {
@@ -195,7 +215,18 @@ class BaseEntity extends CollisionCore {
         }
     }
 
+    onCollision(hitEntity, allEntities) {
+
+    }
+
     update(interval, allEntities, spatialGrid) {
+        if (this.attachedTo) {
+            // Update position based on attached entity
+            this.x = this.attachedTo.x + this.attachmentOffset.x;
+            this.y = this.attachedTo.y + this.attachmentOffset.y;
+            return;
+        }
+
         if (!this.name) {
             if (Math.abs(this.velocity.x) < 1 && Math.abs(this.velocity.y) < 1) {
                 this.lastYMovement += interval;
@@ -209,18 +240,18 @@ class BaseEntity extends CollisionCore {
                 return;
             }              
         }
-
-        // Only update entities affected by gravity.
-        if (!this.hasGravity || (this.sleeping && !this.name)) return;
-
+        
         // Apply gravity.
-        this.applyGravity(interval);
+        if (this.hasGravity) this.applyGravity(interval);
+        
+        // Only update entities affected by gravity.
+        if (!this.hasCollision || (this.sleeping && !this.name)) return;
 
         // Handle movement and collisions.
         if (this.name) {
-            this.handleVelocity(interval, spatialGrid);
+            this.handleVelocity(interval, spatialGrid, allEntities);
         } else {
-            this.handleVelocityOptimized(interval, spatialGrid);
+            this.handleVelocityOptimized(interval, spatialGrid, allEntities);
         }
         // Apply friction.
         this.applyFriction();
@@ -234,7 +265,7 @@ class BaseEntity extends CollisionCore {
         this.velocity.y += this.gravity * interval;
     }
 
-    handleVelocityOptimized(interval, spatialGrid) {
+    handleVelocityOptimized(interval, spatialGrid, allEntities) {
         let dx = this.velocity.x * interval;
         let dy = this.velocity.y * interval;
 
@@ -243,8 +274,9 @@ class BaseEntity extends CollisionCore {
         let collidedX = false;
         const objectsX = spatialGrid.query(this);
         for (const obj of objectsX) {
-            if (obj !== this && CollisionCore.staticCheckCollision(this, obj)) {
+            if (obj !== this && obj.hasCollision && !obj.damage && CollisionCore.staticCheckCollision(this, obj)) {
                 collidedX = true;
+                this.onCollision(obj, allEntities)
                 break;
             }
         }
@@ -258,8 +290,9 @@ class BaseEntity extends CollisionCore {
         let collidedY = false;
         const objectsY = spatialGrid.query(this);
         for (const obj of objectsY) {
-            if (obj !== this && CollisionCore.staticCheckCollision(this, obj)) {
+            if (obj !== this && obj.hasCollision && !obj.damage && CollisionCore.staticCheckCollision(this, obj)) {
                 collidedY = true;
+                this.onCollision(obj, allEntities)
                 break;
             }
         }
@@ -413,16 +446,12 @@ class BaseEntity extends CollisionCore {
                     const textureAspectRatio = currentFrame.width / currentFrame.height;
                     const entityAspectRatio = this.visualWidth / this.visualHeight;
     
-                    // Adjust scaling to maintain the texture's aspect ratio
                     if (textureAspectRatio > entityAspectRatio) {
-                        // Texture is wider than the entity, scale height to match
                         scaleY = this.visualWidth / textureAspectRatio;
                     } else {
-                        // Texture is taller than the entity, scale width to match
                         scaleX = this.visualHeight * textureAspectRatio;
                     }
     
-                    // Apply animation flipping
                     if (currentAnimation.flipped) {
                         scaleX = -scaleX;
                     }
@@ -430,14 +459,17 @@ class BaseEntity extends CollisionCore {
             }
         }
 
+        // Position translation
         if (this.name) {
-            // Position the entity so that the bottom of the texture aligns with the hitbox bottom.
             vec3.set(tempVec3, this.x + this.halfWidth, this.y + this.halfHeight + 10, 0);
-            mat4.translate(modelMatrix, modelMatrix, tempVec3);
         } else {
-            // Position the entity so that the bottom of the texture aligns with the hitbox bottom.
             vec3.set(tempVec3, this.x + this.halfWidth, this.y + this.halfHeight, 0);
-            mat4.translate(modelMatrix, modelMatrix, tempVec3);
+        }
+        mat4.translate(modelMatrix, modelMatrix, tempVec3);
+
+        // Apply rotation if it exists
+        if (this.rotation) {
+            mat4.rotateZ(modelMatrix, modelMatrix, this.rotation);
         }
     
         // Apply the calculated scaling

@@ -1,6 +1,6 @@
 import Player from './src/entities/player/player.js';
 import Platform from './src/entities/platforms/platform.js';
-import { keys, ctx as gl, allEntities, canvas, STATE } from './src/configuration/constants.js';
+import { keys, ctx as gl, allEntities, canvas, STATE, LAYERS } from './src/configuration/constants.js';
 import Camera from './src/systems/camera.js';
 import SpatialGrid from './src/systems/SpatialGrid.js';
 import SunWebGL from './src/entities/sun.js';
@@ -10,6 +10,7 @@ import SnowSystem from './src/systems/SnowSystem.js';
 import EntityBatchRenderer from './src/systems/EntityBatchRenderer.js';
 import Fragment from './src/entities/fragments/Fragment.js';
 import socket from './src/systems/sockets.js'
+import Gun from './src/entities/player/Gun.js';
 
 window.addEventListener('keydown', e => {
 		keys[e.code] = true;
@@ -101,13 +102,28 @@ const run = async () => {
 				});
 			}
 		})();
-
+		window.camera = camera
 		const bgColor = levelData?.backgroundColor || '#ffffff';
 		const [r, g, b, a] = hexToWebGLColor(bgColor);
 
 		canvas.style.backgroundColor = bgColor;
 		gl.clearColor(r, g, b, a);
 
+		console.log('allEntities', allEntities.length)
+
+		// Initialize guns with predefined spawn locations
+		const gunSpawnLocations = [
+			{ x: STATE.myPlayer.x -200, y: STATE.myPlayer.y + 260 },
+			// { x: 300, y: 400 },
+			// Add more spawn locations as needed
+		];
+
+		gunSpawnLocations.forEach(async location => {
+
+			const gun = new Gun(canvas, gl, location);
+			await gun.animationsPromise
+			allEntities.push(gun);
+		});
 		// Initialize WebGL shared resources for entities.
 		allEntities.push(STATE.myPlayer);
 		allEntities.forEach(entity => entity.init(gl));
@@ -151,7 +167,7 @@ const run = async () => {
 				if (allEntities[i].destroyed) {
 					allEntities.splice(i, 1);
 				}
-		}
+			}
 		}
 
 		// Create a batch renderer for instanced drawing.
@@ -209,32 +225,25 @@ const run = async () => {
 			skyGradient.draw();
 			gl.enable(gl.DEPTH_TEST);
 			gl.depthFunc(gl.LEQUAL);
-	
-			// --- RENDERING PASSES WITH LAYERING ---
-			// 1. Render background entities first (type "background")
-			batchRenderer.begin();
-			for (let i = 0; i < allEntities.length; i++) {
-				const entity = allEntities[i];
-				if (entity.render && entity.type === 'background' && isEntityVisible(entity, camera)) {
-					batchRenderer.submit(entity);
+
+			for (let currentLayer = LAYERS.BACKGROUND; currentLayer <= LAYERS.FOREGROUND; currentLayer++) {
+				batchRenderer.begin();
+				
+				// Filter entities by current layer
+				for (let i = 0; i < allEntities.length; i++) {
+					const entity = allEntities[i];
+					if (
+						entity.render && 
+						entity.renderLayer === currentLayer && 
+						!(entity instanceof SunWebGL) && 
+						isEntityVisible(entity, camera)
+					) {
+						batchRenderer.submit(entity);
+					}
 				}
+				
+				batchRenderer.flush(viewProjectionMatrix);
 			}
-			batchRenderer.flush(viewProjectionMatrix);
-	
-			// 2. Render non-background entities (excluding SunWebGL)
-			batchRenderer.begin();
-			for (let i = 0; i < allEntities.length; i++) {
-				const entity = allEntities[i];
-				if (
-					entity.render &&
-					entity.type !== 'background' &&
-					!(entity instanceof SunWebGL) &&
-					isEntityVisible(entity, camera)
-				) {
-					batchRenderer.submit(entity);
-				}
-			}
-			batchRenderer.flush(viewProjectionMatrix);
 	
 			// 3. Render snow entities
 			batchRenderer.begin();
