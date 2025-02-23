@@ -38,6 +38,8 @@ class Player extends BaseEntity {
         this.sleeping = false
         this.hasCollision = true
         this.faceDirection = 1;
+        this.rightMouseDownTime = null;
+        this.rightMousePressDuration = 0;
         if (this.isLocalPlayer) {
             this.setupMouseTracking();
             this.setupShooting();
@@ -114,23 +116,65 @@ class Player extends BaseEntity {
 
     setupShooting() {
         window.addEventListener('mousedown', (e) => {
-            // e.button === 0 indicates a left mouse click.
-            if (e.button === 0) {
-                this.shooting = true
+            if (e.button === 0) { // Left mouse click
+                this.shooting = true;
+            } else if (e.button === 2) { // Right mouse click
+                if (this.equippedWeapon) {
+                    // Start tracking the right mouse button press time
+                    this.rightMouseDownTime = performance.now();
+                }
             }
         });
+
         window.addEventListener('mouseup', (e) => {
-            // e.button === 0 indicates a left mouse click.
             if (e.button === 0) {
-              this.shooting = false
+                this.shooting = false;
+            } else if (e.button === 2) {
+                if (this.equippedWeapon) {
+                    this.rightMousePressDuration = performance.now() - this.rightMouseDownTime;
+                    this.rightMouseDownTime = null;
+
+                    // Calculate charge strength
+                    const maxChargeTime = 1000; // Max 1 second charge
+                    const chargeTime = Math.min(this.rightMousePressDuration, maxChargeTime);
+                    const strength = (chargeTime / maxChargeTime) * 2500; // Max 2500 velocity
+
+                    // Get throw direction from gun rotation
+                    const angle = this.equippedWeapon.rotation;
+                    const direction = {
+                        x: Math.cos(angle),
+                        y: Math.sin(angle)
+                    };
+
+                    // Apply velocity with player's current momentum
+                    this.equippedWeapon.velocity.x = direction.x * strength + this.velocity.x * 0.5;
+                    this.equippedWeapon.velocity.y = direction.y * strength + this.velocity.y * 0.5;
+
+                    // Reset weapon properties
+                    // this.equippedWeapon.friction = 0.99;
+                    this.equippedWeapon.airFriction = 0.99;
+                    this.equippedWeapon.attachedTo = null;
+                    this.equippedWeapon.hasGravity = true;
+                    this.equippedWeapon.grounded = false
+                    this.equippedWeapon.sleeping = false;
+                    this.equippedWeapon.type = 'background';
+
+                    this.dropItem(this.equippedWeapon);
+                    this.equippedWeapon = null;
+                } else {
+                    this.handleWeaponPickup(allEntities);
+                }
             }
-          });
+        });
+
+        window.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
     }
 
     update(deltaTime, allEntities, spatialGrid) {
         if (this.isLocalPlayer) {
             this.handleMovement(deltaTime, allEntities);
-            this.handleWeaponPickup(allEntities);
             this.updateWorldMousePosition(); // Update world mouse position every frame
             this.updateGunRotation();
             if (this.shooting) {
@@ -143,13 +187,12 @@ class Player extends BaseEntity {
 
     handleMovement(interval, entities) {
         const accelerationFactor = this.grounded ? 1 : 0.9;
-
-        if (keys['ArrowUp'] && this.grounded) {
+        if ((keys['ArrowUp'] || keys['KeyW']) && this.grounded) {
             this.velocity.y = -(this.jumpForce * interval);
             this.grounded = false;
         }
 
-        if (keys['ArrowRight']) {
+        if (keys['ArrowRight'] || keys['KeyD']) {
             if (this.direction !== 1) {
                 this.runTime = 0;
             }
@@ -157,7 +200,7 @@ class Player extends BaseEntity {
             this.direction = 1;
             this.runTime += interval;
             this.animationController.play('run');
-        } else if (keys['ArrowLeft']) {
+        } else if (keys['ArrowLeft'] || keys['KeyA']) {
             if (this.direction !== -1) {
                 this.runTime = 0;
             }
@@ -237,14 +280,13 @@ class Player extends BaseEntity {
                 const entityX = entity.x + entity.width / 2;
                 const entityY = entity.y + entity.height / 2;
                 const distance = Math.sqrt((playerX - entityX) ** 2 + (playerY - entityY) ** 2);
-
+                
                 if (distance < radius && this.equippedWeapon !== entity) {
                     this.equippedWeapon = entity;
                     this.pickupItem(entity)
-                    entity.gravity = false
-                    entity.sleep = true
+                    entity.hasGravity = false
+                    entity.sleeping = true
                     entity.type = 'background'
-                    // entities.splice(i, 1);
                     break;
                 }
             }

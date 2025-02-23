@@ -7,6 +7,7 @@ class Fragment extends BaseEntity {
 		this.lifetime = 5.0; // Lifetime in seconds before the fragment is considered destroyed.
         this.enableLife = false
 		this.destroyed = false;
+		this.isFragment = true
 	}
 
 	update(deltaTime, allEntities, spatialGrid) {

@@ -13,8 +13,9 @@ class Bullet extends BaseEntity {
     this.lifetime = lifetime; // Lifetime in seconds
     this.hasGravity = false;
     this.hasCollision = true;
+    this.type = 'bullet'
     this.friction = 1;
-    this.airFriction = 1;
+    this.airFriction = 0.99;
     
     // Calculate velocity based on rotation.
     this.velocity.x = Math.cos(rotation) * speed;

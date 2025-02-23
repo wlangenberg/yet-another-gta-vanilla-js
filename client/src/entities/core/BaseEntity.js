@@ -231,8 +231,6 @@ class BaseEntity extends CollisionCore {
             if (Math.abs(this.velocity.x) < 1 && Math.abs(this.velocity.y) < 1) {
                 this.lastYMovement += interval;
             } else if (this.sleeping)  {
-                this.sleeping = false;
-
                 //!Warning ACTIVATING NEARBY OBJECTS, PERFORMANT HEAVY
                 const radius = this.width;
                 const queryBox = {
@@ -265,6 +263,7 @@ class BaseEntity extends CollisionCore {
             if (this.lastYMovement > 3 && Math.abs(this.velocity.y) < 0.1) {
                 this.sleeping = true;
                 this.grounded = true;
+                this.hasGravity = false;
                 this.lastYMovement = 0;
                 return;
             }              
@@ -334,16 +333,18 @@ class BaseEntity extends CollisionCore {
         const objectsX = spatialGrid.query(this);
         
         for (const obj of objectsX) {
-            if (obj !== this && obj.hasCollision && !obj.damage && CollisionCore.staticCheckCollision(this, obj)) {
+            if (obj !== this && obj.hasCollision && obj.type !== 'bullet'  && CollisionCore.staticCheckCollision(this, obj)) {
+                if ((this.type === 'gun' && obj.isLocalPlayer) || (this.isLocalPlayer && obj.type === 'gun')) continue
+
                 collidedX = true;
                 collidedObject = obj;
                 this.onCollision(obj, allEntities);
     
                 // Simple pushing logic
-                if (obj.mass && this.mass && !obj.sleeping) {
+                if (obj.mass && this.mass && (!obj.sleeping || obj.isFragment)) {
                     const pushFactor = Math.min(Math.abs(this.velocity.x) * (this.mass / obj.mass), 1000); // Cap maximum push speed
                     obj.sleeping = false
-                    // obj.hasGravity = true
+                    obj.hasGravity = true
                     // obj.hasCollision = true
                     // obj.lastYMovement = 0 
                     if (this.velocity.x > 0) {
@@ -371,18 +372,19 @@ class BaseEntity extends CollisionCore {
         const objectsY = spatialGrid.query(this);
         
         for (const obj of objectsY) {
-            if (obj !== this && obj.hasCollision && !obj.damage && CollisionCore.staticCheckCollision(this, obj)) {
+            if (obj !== this && obj.hasCollision && obj.type !== 'bullet' && CollisionCore.staticCheckCollision(this, obj)) {
+                if ((this.type === 'gun' && obj.isLocalPlayer) || (this.isLocalPlayer && obj.type === 'gun')) continue
                 collidedY = true;
                 this.onCollision(obj, allEntities);
                 
                 // Simple vertical pushing logic
-                if (obj.mass && this.mass && !obj.sleeping) {
+                if (obj.mass && this.mass && (!obj.sleeping || obj.isFragment)) {
                     // console.log('PUSH', obj.mass, this.mass, obj, this)
                     const pushFactor = Math.min(Math.abs(this.velocity.y) * (this.mass / obj.mass), 1000);
                     obj.sleeping = false
                     obj.hasGravity = true
                     if (this.velocity.y > 0) {
-                        obj.velocity.y = pushFactor;
+                        obj.velocity.y += pushFactor;
                     } else if (this.velocity.y < 0) {
                         obj.velocity.y -= pushFactor;
                     }
@@ -396,6 +398,8 @@ class BaseEntity extends CollisionCore {
             this.velocity.y = 0;
             if (dy > 0) {
                 this.grounded = true;
+            } else {
+                this.grounded = false;
             }
         }
     }

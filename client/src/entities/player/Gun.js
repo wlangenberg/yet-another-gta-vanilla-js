@@ -8,7 +8,7 @@ import Fragment from '../fragments/Fragment.js';
 class Gun extends BaseWeapon {
   constructor(canvas, gl, { x = 0, y = 0, name = 'Gun', damage = 10, range = 50 } = {}) {
     super(x, y, 50, 50, [0.0, 1.0, 1.0, 1.0], canvas);
-    this.name = name;
+    this.name = null;
     this.damage = damage;
     this.range = range;
     this.fireRate = 5;
@@ -26,6 +26,7 @@ class Gun extends BaseWeapon {
     this.rotation = 0;
     this.animationsPromise = this.addVisuals();
     this.hasCollision = true;
+    this.type = 'gun'
   }
 
   onPickup(player) {
@@ -37,6 +38,9 @@ class Gun extends BaseWeapon {
   onDrop() {
     this.hasGravity = true
     this.hasCollision = true
+    this.sleeping = true
+    this.attachedTo = null
+    this.type = 'gun'
     this.resetRenderLayer();
   }
 
@@ -80,7 +84,7 @@ class Gun extends BaseWeapon {
         x: bulletX,
         y: bulletY,
         rotation: this.rotation,
-        speed: 1500,
+        speed: 3000,
         damage: this.damage,
         lifetime: 2
     });
