@@ -230,8 +230,37 @@ class BaseEntity extends CollisionCore {
         if (!this.name) {
             if (Math.abs(this.velocity.x) < 1 && Math.abs(this.velocity.y) < 1) {
                 this.lastYMovement += interval;
-            } else {
+            } else if (this.sleeping)  {
                 this.sleeping = false;
+
+                //!Warning ACTIVATING NEARBY OBJECTS, PERFORMANT HEAVY
+                const radius = this.width;
+                const queryBox = {
+                    x: this.x - radius,
+                    y: this.y - radius,
+                    width: this.width + radius * 2,
+                    height: this.height + radius * 2
+                };
+                
+                const nearbyObjects = spatialGrid.query(queryBox);
+                for (const nearbyObject of nearbyObjects) {
+                    // Calculate actual distance between object centers
+                    const centerX = this.x + this.width / 2;
+                    const centerY = this.y + this.height / 2;
+                    const objCenterX = nearbyObject.x + nearbyObject.width / 2;
+                    const objCenterY = nearbyObject.y + nearbyObject.height / 2;
+                    
+                    const distanceX = centerX - objCenterX;
+                    const distanceY = centerY - objCenterY;
+                    const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
+                    
+                    // Wake up objects within the radius
+                    if (distance <= radius) {
+                        nearbyObject.hasGravity = true
+                        nearbyObject.sleeping = false;
+                    }
+                }
+
             }
             if (this.lastYMovement > 3 && Math.abs(this.velocity.y) < 0.1) {
                 this.sleeping = true;
@@ -245,163 +274,129 @@ class BaseEntity extends CollisionCore {
         if (this.hasGravity) this.applyGravity(interval);
         
         // Only update entities affected by gravity.
-        if (!this.hasCollision || (this.sleeping && !this.name)) return;
+        if (!this.hasCollision || (this.sleeping && !this.name)) {
+            this.y += this.velocity.y * interval
+            this.x += this.velocity.x * interval
+            return
+        }
 
         // Handle movement and collisions.
-        if (this.name) {
-            this.handleVelocity(interval, spatialGrid, allEntities);
-        } else {
-            this.handleVelocityOptimized(interval, spatialGrid, allEntities);
-        }
+        this.handleVelocityOptimized(interval, spatialGrid, allEntities);
         // Apply friction.
         this.applyFriction();
-        if (this.name) {
-            // If the entity's velocity is negligible after updates, put it to sleep.
-            this.resolveOverlap(spatialGrid);
-        }
     }
 
     applyGravity(interval) {
         this.velocity.y += this.gravity * interval;
     }
 
+    testStepHeight(collidedObject, spatialGrid) {
+        if (this.name) {
+            // Try to step up before canceling horizontal movement
+            const candidateStep = (this.y + this.height) - collidedObject.y;
+            if (candidateStep > 0 && candidateStep <= this.stepHeight) {
+                // Temporarily move up by step height
+                this.y -= candidateStep;
+                
+                // Check if this new position is valid
+                const stepCheckObjects = spatialGrid.query(this);
+                let stepCollision = false;
+                
+                for (const obj of stepCheckObjects) {
+                    if (obj !== this && obj !== collidedObject && obj.hasCollision && !obj.damage && 
+                        CollisionCore.staticCheckCollision(this, obj)) {
+                        stepCollision = true;
+                        break;
+                    }
+                }
+                
+                if (!stepCollision) {
+                    // If no collision in stepped up position, allow the horizontal movement
+                    this.grounded = true;
+                    // collidedX = false;
+                    return true
+                } else {
+                    // If step up failed, restore original y position
+                    this.y += candidateStep;
+                }
+            }
+        }
+    }
+
     handleVelocityOptimized(interval, spatialGrid, allEntities) {
         let dx = this.velocity.x * interval;
         let dy = this.velocity.y * interval;
-
-        // Attempt horizontal movement
+    
+        // Attempt horizontal movement first
         this.x += dx;
         let collidedX = false;
+        let collidedObject = null;
         const objectsX = spatialGrid.query(this);
+        
         for (const obj of objectsX) {
             if (obj !== this && obj.hasCollision && !obj.damage && CollisionCore.staticCheckCollision(this, obj)) {
                 collidedX = true;
-                this.onCollision(obj, allEntities)
+                collidedObject = obj;
+                this.onCollision(obj, allEntities);
+    
+                // Simple pushing logic
+                if (obj.mass && this.mass && !obj.sleeping) {
+                    const pushFactor = Math.min(Math.abs(this.velocity.x) * (this.mass / obj.mass), 1000); // Cap maximum push speed
+                    obj.sleeping = false
+                    // obj.hasGravity = true
+                    // obj.hasCollision = true
+                    // obj.lastYMovement = 0 
+                    if (this.velocity.x > 0) {
+                        obj.velocity.x = pushFactor;
+                    } else if (this.velocity.x < 0) {
+                        obj.velocity.x = -pushFactor;
+                    }
+                }
+                
+                if (this.testStepHeight(obj, spatialGrid)) {
+                    collidedX = false;
+                }
                 break;
             }
         }
+    
         if (collidedX) {
             this.x -= dx;
             this.velocity.x = 0;
         }
-
+    
         // Attempt vertical movement
         this.y += dy;
         let collidedY = false;
         const objectsY = spatialGrid.query(this);
+        
         for (const obj of objectsY) {
             if (obj !== this && obj.hasCollision && !obj.damage && CollisionCore.staticCheckCollision(this, obj)) {
                 collidedY = true;
-                this.onCollision(obj, allEntities)
+                this.onCollision(obj, allEntities);
+                
+                // Simple vertical pushing logic
+                if (obj.mass && this.mass && !obj.sleeping) {
+                    // console.log('PUSH', obj.mass, this.mass, obj, this)
+                    const pushFactor = Math.min(Math.abs(this.velocity.y) * (this.mass / obj.mass), 1000);
+                    obj.sleeping = false
+                    obj.hasGravity = true
+                    if (this.velocity.y > 0) {
+                        obj.velocity.y = pushFactor;
+                    } else if (this.velocity.y < 0) {
+                        obj.velocity.y -= pushFactor;
+                    }
+                }
                 break;
             }
         }
+    
         if (collidedY) {
             this.y -= dy;
             this.velocity.y = 0;
-            this.grounded = true;
-        }
-    }
-
-    handleVelocity(interval, spatialGrid) {
-        let remainingTime = interval;
-        const maxIterations = 10;
-        for (let i = 0; i < maxIterations; i++) {
-            let earliestCollisionTime = 1;
-            let collisionResult = null;
-            let collisionObject = null;
-            const nearbyObjects = spatialGrid.query(this);
-            for (const obj of nearbyObjects) {
-                if (obj !== this && obj.type !== 'background') {
-                    const broadphaseBox = {
-                        x: this.velocity.x > 0 ? this.x : this.x + this.velocity.x * remainingTime,
-                        y: this.velocity.y > 0 ? this.y : this.y + this.velocity.y * remainingTime,
-                        width: this.velocity.x > 0 ? this.width + this.velocity.x * remainingTime : this.width - this.velocity.x * remainingTime,
-                        height: this.velocity.y > 0 ? this.height + this.velocity.y * remainingTime : this.height - this.velocity.y * remainingTime
-                    };
-                    if (!CollisionCore.staticCheckCollision(broadphaseBox, obj)) {
-                        continue;
-                    }
-                    const result = this.sweptAABB(obj, remainingTime);
-                    if (result.collision && result.entryTime < earliestCollisionTime) {
-                        earliestCollisionTime = result.entryTime;
-                        collisionResult = result;
-                        collisionObject = obj;
-                    }
-                }
-            }
-            if (!collisionResult) {
-                // No collision detected; move normally for the remaining time.
-                this.x += this.velocity.x * remainingTime;
-                this.y += this.velocity.y * remainingTime;
-                break;
-            }
-
-            // StepHeight logic: if the collision is horizontal and within the stepHeight threshold,
-            // attempt to step up the ledge.
-            if (collisionResult.normalX !== 0 && collisionResult.normalY === 0 && this.stepHeight > 0) {
-                const candidateStep = (this.y + this.height) - collisionObject.y;
-                if (candidateStep > 0 && candidateStep <= this.stepHeight) {
-                    const candidate = {
-                        x: this.x,
-                        y: this.y - candidateStep,
-                        width: this.width,
-                        height: this.height
-                    };
-                    if (!CollisionCore.staticCheckCollision(candidate, collisionObject)) {
-                        this.y -= candidateStep;
-                        this.grounded = true;
-                        continue;
-                    }
-                }
-            }
-
-            // Move to the collision point.
-            this.x += this.velocity.x * earliestCollisionTime * remainingTime;
-            this.y += this.velocity.y * earliestCollisionTime * remainingTime;
-
-            // Mass-based collision response only when there is an actual velocity change (e.g., a push).
-            if (collisionObject && typeof collisionObject.mass !== "undefined") {
-                const normal = { x: collisionResult.normalX, y: collisionResult.normalY };
-                const relVelX = this.velocity.x - collisionObject.velocity.x;
-                const relVelY = this.velocity.y - collisionObject.velocity.y;
-                const relVelAlongNormal = relVelX * normal.x + relVelY * normal.y;
-                if (Math.abs(relVelAlongNormal) > 0.01) {
-                    const m1 = this.mass;
-                    const m2 = collisionObject.mass;
-                    const v1 = { x: this.velocity.x, y: this.velocity.y };
-                    const v2 = { x: collisionObject.velocity.x, y: collisionObject.velocity.y };
-                    const v1n = v1.x * normal.x + v1.y * normal.y;
-                    const v2n = v2.x * normal.x + v2.y * normal.y;
-                    const v1t = { x: v1.x - v1n * normal.x, y: v1.y - v1n * normal.y };
-                    const v2t = { x: v2.x - v2n * normal.x, y: v2.y - v2n * normal.y };
-                    const v1nAfter = (v1n * (m1 - m2) + 2 * m2 * v2n) / (m1 + m2);
-                    const v2nAfter = (v2n * (m2 - m1) + 2 * m1 * v1n) / (m1 + m2);
-                    collisionObject.velocity.x = v2t.x + v2nAfter * normal.x;
-                    collisionObject.velocity.y = v2t.y + v2nAfter * normal.y;
-                } else {
-                    // If there is no significant push, fallback to sliding along the surface.
-                    const dot = this.velocity.x * normal.x + this.velocity.y * normal.y;
-                    this.velocity.x = this.velocity.x - dot * normal.x;
-                    this.velocity.y = this.velocity.y - dot * normal.y;
-                }
-            } else {
-                // Fallback to simple sliding if mass is not defined.
-                const dot = this.velocity.x * collisionResult.normalX + this.velocity.y * collisionResult.normalY;
-                this.velocity.x = this.velocity.x - dot * collisionResult.normalX;
-                this.velocity.y = this.velocity.y - dot * collisionResult.normalY;
-            }
-
-            const dot = this.velocity.x * collisionResult.normalX + this.velocity.y * collisionResult.normalY;
-            this.velocity.x = this.velocity.x - dot * collisionResult.normalX;
-            this.velocity.y = this.velocity.y - dot * collisionResult.normalY;
-
-            if (collisionResult.normalY === -1) {
+            if (dy > 0) {
                 this.grounded = true;
             }
-
-            remainingTime = remainingTime * (1 - earliestCollisionTime);
-            if (remainingTime < 0.001) break;
         }
     }
 

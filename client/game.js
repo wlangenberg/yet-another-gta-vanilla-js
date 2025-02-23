@@ -113,7 +113,7 @@ const run = async () => {
 
 		// Initialize guns with predefined spawn locations
 		const gunSpawnLocations = [
-			{ x: STATE.myPlayer.x -200, y: STATE.myPlayer.y + 260 },
+			{ x: STATE.myPlayer.x -100, y: STATE.myPlayer.y },
 			// { x: 300, y: 400 },
 			// Add more spawn locations as needed
 		];
@@ -215,7 +215,7 @@ const run = async () => {
 					}
 				}
 				dayNightCycle.update(lastTime);
-				snowSystem.update(fixedTimeStep, snowList, spatialGrid);
+				// snowSystem.update(fixedTimeStep, snowList, spatialGrid);
 				accumulatedTime -= fixedTimeStep;
 			}
 	

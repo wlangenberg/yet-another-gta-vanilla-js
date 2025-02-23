@@ -35,6 +35,9 @@ class Player extends BaseEntity {
         this.mousePosition = { x: 0, y: 0 };
         this.worldMousePosition = { x: 0, y: 0 };
         this.shooting = false
+        this.sleeping = false
+        this.hasCollision = true
+        this.faceDirection = 1;
         if (this.isLocalPlayer) {
             this.setupMouseTracking();
             this.setupShooting();
@@ -60,8 +63,22 @@ class Player extends BaseEntity {
                 y: e.clientY - rect.top
             };
             this.updateWorldMousePosition();
+            
+            // Get player's center position in screen coordinates
+            const camera = window.camera;
+            const playerScreenX = this.x + this.width/2 - camera.x;
+            
+            // Update direction based on mouse position relative to player
+            if (this.mousePosition.x > playerScreenX) {
+                this.faceDirection = 1;
+                this.animationController.setFlipped(false);
+            } else {
+                this.faceDirection = -1;
+                this.animationController.setFlipped(true);
+            }
         });
     }
+    
 
     updateWorldMousePosition() {
         // Get the camera position from the game's camera
@@ -140,7 +157,6 @@ class Player extends BaseEntity {
             this.direction = 1;
             this.runTime += interval;
             this.animationController.play('run');
-            this.animationController.setFlipped(false)
         } else if (keys['ArrowLeft']) {
             if (this.direction !== -1) {
                 this.runTime = 0;
@@ -149,7 +165,6 @@ class Player extends BaseEntity {
             this.direction = -1;
             this.runTime += interval;
             this.animationController.play('run');
-            this.animationController.setFlipped(true)
         } else {
             this.runTime = 0;
             this.movingStartTime = null;
@@ -169,12 +184,11 @@ class Player extends BaseEntity {
             if (this.velocity.x < -this.maxSpeed) this.velocity.x = -this.maxSpeed;
         }
     }
-
     updateGunRotation() {
         if (this.equippedWeapon) {
             // Determine attachment parameters and base angle based on player's direction.
             let attachmentOffset, scaleX, scaleY, baseAngle;
-            if (this.direction === 1) { // Facing right.
+            if (this.faceDirection === 1) { // Facing right.
                 attachmentOffset = { x: 10, y: this.height / 4 };
                 scaleX = 2;
                 scaleY = 2;

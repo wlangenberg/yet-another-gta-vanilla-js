@@ -25,14 +25,18 @@ class Gun extends BaseWeapon {
     this.renderLayer = this.defaultLayer;
     this.rotation = 0;
     this.animationsPromise = this.addVisuals();
-    this.hasCollision = false;
+    this.hasCollision = true;
   }
 
   onPickup(player) {
+    this.hasGravity = false
+    this.hasCollision = false
     this.setRenderLayer(2);
   }
-
+  
   onDrop() {
+    this.hasGravity = true
+    this.hasCollision = true
     this.resetRenderLayer();
   }
 
@@ -114,6 +118,7 @@ class Gun extends BaseWeapon {
             fragment.velocity.x = (Math.random() - 0.9) * 700;
             fragment.velocity.y = (Math.random() - 0.9) * 700;
             fragment.hasGravity = true;
+            fragment.hasCollision = false;
             fragment.lifetime = 1;
             fragment.enableLife = true;
             allEntities.push(fragment);

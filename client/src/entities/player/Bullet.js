@@ -59,8 +59,8 @@ class Bullet extends BaseEntity {
   splitEntity(entity, allEntities) {
       const fragments = [];
       // Split the entity into 4 pieces (2x2 grid).
-      const newWidth = entity.width / 2;
-      const newHeight = entity.height / 2;
+      const newWidth = entity.width / 1;
+      const newHeight = entity.height / 1;
       for (let row = 0; row < 1; row++) {
           for (let col = 0; col < 1; col++) {
               const fragmentX = entity.x + col * newWidth;
