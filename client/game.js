@@ -1,6 +1,7 @@
 import Player from './src/entities/player/player.js';
 import Platform from './src/entities/platforms/platform.js';
-import { keys, ctx as gl, allEntities, canvas, STATE, LAYERS } from './src/configuration/constants.js';
+import { keys, allEntities, STATE, LAYERS } from './src/configuration/constants.js';
+import { canvas, ctx as gl, } from './src/configuration/canvas.js';
 import Camera from './src/systems/camera.js';
 import SpatialGrid from './src/systems/SpatialGrid.js';
 import SunWebGL from './src/entities/sun.js';
@@ -52,17 +53,7 @@ const run = async () => {
 
 		// Initialize static entities (platforms)
 		levelData.rectangles.forEach(rect => {
-			let color;
-			if (rect.color === 'sandybrown') {
-				color = [0.96, 0.64, 0.38, 1.0];
-			} else if (rect.color === 'green') {
-				color = [0.0, 0.5, 0.0, 1.0];
-			} else if (rect.color === 'grey') {
-				color = [0.5, 0.5, 0.5, 1.0];
-			} else {
-				color = [1.0, 1.0, 1.0, 1.0];
-			}
-            const platform = new Platform(rect.x, rect.y, rect.width, rect.height, color, canvas, rect.type)
+            const platform = new Platform(rect.x, rect.y, rect.width, rect.height, hexToWebGLColor(rect.color), canvas, rect.type, rect.layer)
 			allEntities.push(platform);
             // const newWidth = platform.width / 2;
             // const newHeight = platform.height / 2;

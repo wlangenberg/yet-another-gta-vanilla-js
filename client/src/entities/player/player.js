@@ -2,7 +2,8 @@
 import { BaseEntity } from "../core/BaseEntity.js";
 import Fragment from "../fragments/Fragment.js";
 import Gun from "./Gun.js"; // Import the new Gun class
-import { keys, ctx as gl, allEntities, canvas, STATE, LAYERS } from "../../configuration/constants.js";
+import { keys, allEntities,  STATE, LAYERS } from "../../configuration/constants.js";
+import { canvas } from "../../configuration/canvas.js";
 import { Animation, AnimationController } from "../../systems/Animation.js";
 
 class Player extends BaseEntity {

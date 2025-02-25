@@ -1,5 +1,6 @@
 
-import { STATE, allEntities, canvas, ctx as gl } from '../configuration/constants.js'
+import { STATE, allEntities, } from '../configuration/constants.js'
+import { canvas, ctx as gl } from '../configuration/canvas.js'
 import Player from '../entities/player/player.js'
 import toast from './toast.js'
 import Platform from '../entities/platforms/platform.js'

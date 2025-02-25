@@ -1,4 +1,6 @@
+import { LAYERS } from "../configuration/constants.js"
 import { BaseEntity } from "./core/BaseEntity.js"
+
 
 class SunWebGL extends BaseEntity {
     constructor(x, y, width, height, canvas, gl) {
@@ -381,7 +383,7 @@ class SunWebGL extends BaseEntity {
         this.updateViewportBounds(camera)
         // Only update shadows periodically
         if (this.frameCount % this.updateInterval === 0) {
-            const obstacles = allGameObjects.filter(obj => obj !== this)
+            const obstacles = allGameObjects.filter(obj => obj !== this && obj.renderLayer !== LAYERS.BACKGROUND)
             const quads = this.computeShadowQuads(obstacles)
             // Optimize vertex array creation: 6 vertices per quad, 3 components each
             const verts = new Float32Array(quads.length * 18)

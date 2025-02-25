@@ -13,6 +13,7 @@ class Bullet extends BaseEntity {
     this.lifetime = lifetime; // Lifetime in seconds
     this.hasGravity = false;
     this.hasCollision = true;
+    this.sleeping = false;
     this.type = 'bullet'
     this.friction = 1;
     this.airFriction = 0.99;
@@ -58,31 +59,41 @@ class Bullet extends BaseEntity {
   }
 
   splitEntity(entity, allEntities) {
-      const fragments = [];
-      // Split the entity into 4 pieces (2x2 grid).
-      const newWidth = entity.width / 1;
-      const newHeight = entity.height / 1;
-      for (let row = 0; row < 1; row++) {
-          for (let col = 0; col < 1; col++) {
-              const fragmentX = entity.x + col * newWidth;
-              const fragmentY = entity.y + row * newHeight;
-              const fragment = new Fragment(entity.canvas, entity.gl, {
-                  x: fragmentX,
-                  y: fragmentY,
-                  width: newWidth,
-                  height: newHeight,
-                  color: Array.from(entity.color)
-              });
-              // Apply random velocity to scatter the fragments.
-              fragment.hasCollision = true;
-              fragment.hasGravity = true;
-              fragment.velocity.x = (Math.random() - 0.9) * 3200;
-              fragment.velocity.y = (Math.random() - 0.9) * 3100;
-              allEntities.push(fragment);
-          }
-      }
-      return fragments;
-  }
+    const fragments = [];
+    const fragmentSize = Math.max(12, entity.width / 2); // Each fragment should be 12x12
+
+    // Determine how many fragments fit in the entity
+    const cols = Math.floor(entity.width / fragmentSize);
+    const rows = Math.floor(entity.height / fragmentSize);
+
+    for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+            const fragmentX = entity.x + col * fragmentSize;
+            const fragmentY = entity.y + row * fragmentSize;
+            
+            const fragment = new Fragment(entity.canvas, entity.gl, {
+                x: fragmentX,
+                y: fragmentY,
+                width: fragmentSize,
+                height: fragmentSize,
+                color: Array.from(entity.color)
+            });
+
+            // Apply random velocity to scatter the fragments.
+            fragment.hasCollision = true;
+            fragment.hasGravity = true;
+            fragment.sleeping = false;
+            fragment.velocity.x = (Math.random() - 0.5) * 3200;
+            fragment.velocity.y = (Math.random() - 0.5) * 3100;
+
+            allEntities.push(fragment);
+            fragments.push(fragment);
+        }
+    }
+
+    return fragments;
+}
+
 
 }
 

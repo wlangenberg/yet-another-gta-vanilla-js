@@ -21,6 +21,7 @@ export class CanvasManager {
 
         this.gridCtx = gridCanvas.getContext('2d');
         this.ctx = gameCanvas.getContext('2d');
+        this.canvas = gameCanvas
         
         this.drawGrid();
     }

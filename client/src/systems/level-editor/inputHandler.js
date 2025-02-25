@@ -12,6 +12,10 @@ export class InputHandler {
         this.lastMouseY = 0;
         
         this.selectedTool = null;
+
+        this.selectedTool = null;
+        // New property: holds the active (non–fill) paint tool.
+        this.activePaintTool = null;
         
         this.setupEventListeners();
     }
@@ -79,22 +83,36 @@ export class InputHandler {
         };
     }
 
+    setActivePaintTool(tool) {
+        this.activePaintTool = tool;
+      }
+      
+
+    setSelectedTool(tool) {
+        this.selectedTool = tool;
+      }
+      
+
     draw(event) {
         if (!this.selectedTool) return;
         
         const pos = this.getGridPosition(event);
         
-        if (this.selectedTool.id === "player_spawn") {
-            this.levelData.addPlayerSpawn(pos.x, pos.y);
+        if (this.selectedTool.id === "fill") {
+          // Use the active paint tool’s color for filling.
+          const fillColor = (this.activePaintTool && this.activePaintTool.color) ? this.activePaintTool.color : "#000000";
+          this.selectedTool.draw(pos.x, pos.y, fillColor, this.levelData, this.activePaintTool);
+        } else if (this.selectedTool.id === "player_spawn") {
+          this.levelData.addPlayerSpawn(pos.x, pos.y);
         } else {
-            this.levelData.addRectangle(pos.x, pos.y, this.selectedTool.color, this.selectedTool.id);
+          this.selectedTool.draw(pos.x, pos.y, this.selectedTool.color, this.levelData);
         }
         
         this.renderer.redraw(
-            this.canvasManager.backgroundColor,
-            this.canvasManager.zoomLevel,
-            this.canvasManager.cameraX,
-            this.canvasManager.cameraY
+          this.canvasManager.backgroundColor,
+          this.canvasManager.zoomLevel,
+          this.canvasManager.cameraX,
+          this.canvasManager.cameraY
         );
     }
 

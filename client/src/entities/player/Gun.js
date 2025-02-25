@@ -11,7 +11,7 @@ class Gun extends BaseWeapon {
     this.name = null;
     this.damage = damage;
     this.range = range;
-    this.fireRate = 5;
+    this.fireRate = 15;
     this.fireDelay = 1000 / this.fireRate;
     this.lastFired = 0;
     this.pickupable = true;
@@ -26,19 +26,21 @@ class Gun extends BaseWeapon {
     this.rotation = 0;
     this.animationsPromise = this.addVisuals();
     this.hasCollision = true;
+    this.sleeping = false;
+    this.shootForce = 1000
     this.type = 'gun'
   }
 
   onPickup(player) {
     this.hasGravity = false
     this.hasCollision = false
+    this.sleeping = true
     this.setRenderLayer(2);
   }
   
   onDrop() {
     this.hasGravity = true
     this.hasCollision = true
-    this.sleeping = true
     this.attachedTo = null
     this.type = 'gun'
     this.resetRenderLayer();
@@ -84,7 +86,7 @@ class Gun extends BaseWeapon {
         x: bulletX,
         y: bulletY,
         rotation: this.rotation,
-        speed: 3000,
+        speed: this.shootForce,
         damage: this.damage,
         lifetime: 2
     });

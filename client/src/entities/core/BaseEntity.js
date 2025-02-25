@@ -7,24 +7,7 @@ const transformMatrix = mat4.create();
 const tempVec3 = vec3.create();
 
 class BaseEntity extends CollisionCore {
-    // Static initialization for shared resources
-    static {
-        this.initialized = false;
-        this.vertexBuffer = null;
-        this.textureCoordBuffer = null;
-        this.program = null;
-        this.positionLocation = null;
-        this.textureCoordLocation = null;
-        this.transformMatrixLocation = null;
-        this.colorLocation = null;
-        this.samplerLocation = null;
-        this.useTextureLocation = null;
-    }
-
-    // Attachment properties
-    attachedTo = null;
-    attachmentOffset = { x: 0, y: 0 };
-    constructor(x, y, width, height, color, canvas, type) {
+    constructor(x, y, width, height, color, canvas, type, layer) {
         super();
         this.id = allEntities.length + 1;
         this.x = x;
@@ -60,109 +43,15 @@ class BaseEntity extends CollisionCore {
         // Initialize attachment properties
         this.attachedTo = null;
         this.attachmentOffset = { x: 0, y: 0 };
-        this.renderLayer = 1; // Default layer
+        this.renderLayer = layer ?? 1; // Default layer
         this.defaultLayer = 1; // Store the default layer for this entity
         this.rotation = 0;
+        this.isActive = false;
         this.updateDimensions();
     }
 
     init(gl) {
         this.gl = gl;
-        
-        // Only initialize shared resources once
-        if (BaseEntity.initialized) return;
-        
-        this.initSharedResources(gl);
-        BaseEntity.initialized = true;
-    }
-
-    initSharedResources(gl) {
-        // Create and cache shared vertex buffer
-        BaseEntity.vertexBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, BaseEntity.vertexBuffer);
-        gl.bufferData(
-            gl.ARRAY_BUFFER,
-            new Float32Array([
-                -0.5, -0.5,
-                 0.5, -0.5,
-                 0.5,  0.5,
-                -0.5,  0.5
-            ]),
-            gl.STATIC_DRAW
-        );
-    
-        // Create and cache texture coordinate buffer
-        BaseEntity.textureCoordBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, BaseEntity.textureCoordBuffer);
-        gl.bufferData(
-            gl.ARRAY_BUFFER,
-            new Float32Array([
-                0.0, 0.0,
-                1.0, 0.0,
-                1.0, 1.0,
-                0.0, 1.0
-            ]),
-            gl.STATIC_DRAW
-        );
-    
-        // Create and cache shared shader program
-        const program = gl.createProgram();
-        gl.attachShader(
-            program,
-            this.createShader(
-                gl,
-                gl.VERTEX_SHADER,
-                `
-                attribute vec2 position;
-                attribute vec2 aTextureCoord;
-                uniform mat4 transformMatrix;
-                varying vec2 vTextureCoord;
-                
-                void main() {
-                    gl_Position = transformMatrix * vec4(position, 0.0, 1.0);
-                    vTextureCoord = aTextureCoord;
-                }
-                `
-            )
-        );
-        gl.attachShader(
-            program,
-            this.createShader(
-                gl,
-                gl.FRAGMENT_SHADER,
-                `
-                precision mediump float;
-                uniform vec4 uColor;
-                uniform sampler2D uSampler;
-                uniform bool useTexture;
-                varying vec2 vTextureCoord;
-                
-                void main() {
-                    if (useTexture) {
-                        vec4 texColor = texture2D(uSampler, vTextureCoord);
-                        if (texColor.a < 0.1) discard;
-                        gl_FragColor = texColor;
-                    } else {
-                        gl_FragColor = uColor;
-                    }
-                }
-                `
-            )
-        );
-        gl.linkProgram(program);
-    
-        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-            console.error('Shader program initialization failed:', gl.getProgramInfoLog(program));
-            return;
-        }
-    
-        BaseEntity.program = program;
-        BaseEntity.positionLocation = gl.getAttribLocation(program, 'position');
-        BaseEntity.textureCoordLocation = gl.getAttribLocation(program, 'aTextureCoord');
-        BaseEntity.transformMatrixLocation = gl.getUniformLocation(program, 'transformMatrix');
-        BaseEntity.colorLocation = gl.getUniformLocation(program, 'uColor');
-        BaseEntity.samplerLocation = gl.getUniformLocation(program, 'uSampler');
-        BaseEntity.useTextureLocation = gl.getUniformLocation(program, 'useTexture');
     }
 
     setRenderLayer(layer) {
@@ -173,21 +62,6 @@ class BaseEntity extends CollisionCore {
         this.renderLayer = this.defaultLayer;
     }
     
-
-    createShader(gl, type, source) {
-        const shader = gl.createShader(type);
-        gl.shaderSource(shader, source);
-        gl.compileShader(shader);
-        
-        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-            console.error('Shader compilation failed:', gl.getShaderInfoLog(shader));
-            gl.deleteShader(shader);
-            return null;
-        }
-        
-        return shader;
-    }
-
     resolveOverlap(spatialGrid) {
         const nearbyObjects = spatialGrid.query(this);
         for (const obj of nearbyObjects) {
@@ -227,11 +101,12 @@ class BaseEntity extends CollisionCore {
             return;
         }
 
-        if (!this.name) {
+        if (!this.name && this.isActive) {
             if (Math.abs(this.velocity.x) < 1 && Math.abs(this.velocity.y) < 1) {
                 this.lastYMovement += interval;
-            } else if (this.sleeping)  {
-                //!Warning ACTIVATING NEARBY OBJECTS, PERFORMANT HEAVY
+            } else if (Math.abs(this.velocity.x) > 1 && Math.abs(this.velocity.y) > 1)  {
+                // this.sleeping = true
+                // // //!Warning ACTIVATING NEARBY OBJECTS, PERFORMANT HEAVY
                 const radius = this.width;
                 const queryBox = {
                     x: this.x - radius,
@@ -256,17 +131,24 @@ class BaseEntity extends CollisionCore {
                     if (distance <= radius) {
                         nearbyObject.hasGravity = true
                         nearbyObject.sleeping = false;
+                        nearbyObject.isActive = true;
                     }
                 }
 
             }
-            if (this.lastYMovement > 3 && Math.abs(this.velocity.y) < 0.1) {
+            if (this.lastYMovement > 3 && Math.abs(this.velocity.y) < 1.1 && Math.abs(this.velocity.x) < 1.1) {
                 this.sleeping = true;
                 this.grounded = true;
                 this.hasGravity = false;
+                this.isActive = false;
                 this.lastYMovement = 0;
                 return;
             }              
+        } else if (this.lastYMovement > 3) {
+            this.sleeping = true;
+            this.grounded = true;
+            this.hasGravity = false;
+            this.isActive = false;
         }
         
         // Apply gravity.
@@ -345,6 +227,7 @@ class BaseEntity extends CollisionCore {
                     const pushFactor = Math.min(Math.abs(this.velocity.x) * (this.mass / obj.mass), 1000); // Cap maximum push speed
                     obj.sleeping = false
                     obj.hasGravity = true
+                    obj.isActive = true
                     // obj.hasCollision = true
                     // obj.lastYMovement = 0 
                     if (this.velocity.x > 0) {
@@ -354,7 +237,7 @@ class BaseEntity extends CollisionCore {
                     }
                 }
                 
-                if (this.testStepHeight(obj, spatialGrid)) {
+                if (this.isLocalPlayer && this.testStepHeight(obj, spatialGrid)) {
                     collidedX = false;
                 }
                 break;
@@ -383,6 +266,7 @@ class BaseEntity extends CollisionCore {
                     const pushFactor = Math.min(Math.abs(this.velocity.y) * (this.mass / obj.mass), 1000);
                     obj.sleeping = false
                     obj.hasGravity = true
+                    obj.isActive = true
                     if (this.velocity.y > 0) {
                         obj.velocity.y += pushFactor;
                     } else if (this.velocity.y < 0) {

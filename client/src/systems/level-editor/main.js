@@ -24,8 +24,8 @@ class LevelEditor {
     }
 
     initUI() {
-        this.populateToolList();
         this.canvasManager.initCanvas();
+        this.populateToolList();
         this.renderer.init(this.canvasManager.ctx)
         this.renderer.redraw(
             this.canvasManager.backgroundColor,
@@ -38,18 +38,57 @@ class LevelEditor {
     populateToolList() {
         const toolList = document.getElementById("tool-list");
         toolList.innerHTML = "";
-
+    
         this.tools.forEach((tool) => {
-            const div = document.createElement("div");
-            div.classList.add("tool-item");
-            div.textContent = tool.name;
+        const div = document.createElement("div");
+        div.classList.add("tool-item");
+        div.textContent = tool.name;
+        
+        if (tool.id !== "fill") {
+            // For paint tools, use their defined color.
             div.style.background = tool.color;
-            div.addEventListener("click", () => {
+        } else {
+            // For the fill tool, show a fill icon.
+            div.style.backgroundImage = "url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" fill=\"orange\" viewBox=\"0 0 16 16\"><rect width=\"16\" height=\"16\" fill=\"orange\"/></svg>')";
+            div.style.backgroundSize = "contain";
+            div.style.backgroundRepeat = "no-repeat";
+            div.style.backgroundPosition = "center";
+        }
+        
+        div.addEventListener("click", () => {
+            if (tool.id === "fill") {
+            // Toggle fill tool activation.
+            if (this.inputHandler.selectedTool && this.inputHandler.selectedTool.id === "fill") {
+                // Already active—deactivate fill tool.
+                const newTool = this.activePaintTool || this.tools.find(t => t.id !== "fill");
+                this.inputHandler.setSelectedTool(newTool);
+                div.classList.remove("active");
+                this.canvasManager.canvas.style.cursor = "default";
+            } else {
+                // Activate fill tool.
                 this.inputHandler.setSelectedTool(tool);
-            });
-            toolList.appendChild(div);
+                div.classList.add("active");
+                // Change cursor to a fill icon (using the same embedded SVG).
+                this.canvasManager.canvas.style.cursor = "url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" fill=\"orange\" viewBox=\"0 0 16 16\"><rect width=\"16\" height=\"16\" fill=\"orange\"/></svg>') 8 8, auto";
+            }
+            } else {
+            // For regular paint tools, remove any active fill state.
+            const fillButton = toolList.querySelector(".tool-item.active");
+            if (fillButton && fillButton.textContent === "Fill Tool") {
+                fillButton.classList.remove("active");
+            }
+            // Save this tool as the active paint tool.
+            this.activePaintTool = tool;
+            this.inputHandler.setActivePaintTool(tool);
+            this.inputHandler.setSelectedTool(tool);
+            this.canvasManager.canvas.style.cursor = "default";
+            }
+        });
+        
+        toolList.appendChild(div);
         });
     }
+  
 
     setupEventListeners() {
         document.getElementById('open-tool-panel').addEventListener('click', () => {

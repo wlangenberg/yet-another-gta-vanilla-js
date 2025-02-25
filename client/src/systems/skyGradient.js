@@ -17,7 +17,7 @@ class SkyGradient {
 
         // Define day and night colors for the sky
         this.dayTopColor = [0.53, 0.81, 0.98, 1.0]    // ~ #87CEEB (top)
-        this.dayBottomColor = [1.0, 1.0, 1.0, 1.0]      // ~ #FFFFFF (bottom)
+        this.dayBottomColor = [0.7, 1.0, 1.0, 1.0]      // ~ #FFFFFF (bottom)
         this.nightTopColor = [0.0, 0.0, 0.1, 1.0]       // dark blue at night
         this.nightBottomColor = [0.0, 0.0, 0.0, 1.0]    // black
 

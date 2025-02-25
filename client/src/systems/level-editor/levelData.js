@@ -5,7 +5,7 @@ export class LevelData {
         this.paintToolSize = 12;
     }
 
-    addRectangle(x, y, color, type) {
+    addRectangle(x, y, color, type, layer = 0) {
         const exists = this.rectangles.some(r => r.x === x && r.y === y);
         if (!exists) {
             this.rectangles.push({
@@ -14,7 +14,8 @@ export class LevelData {
                 width: this.paintToolSize,
                 height: this.paintToolSize,
                 color,
-                type
+                type,
+                layer
             });
         }
     }
@@ -49,7 +50,8 @@ export class LevelData {
                 width: r.width,
                 height: r.height,
                 color: r.color,
-                type: r.type
+                type: r.type,
+                layer: r.layer
             }))
         };
     }
