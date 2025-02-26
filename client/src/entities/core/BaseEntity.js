@@ -10,7 +10,8 @@ const tempVec3 = vec3.create();
 class BaseEntity extends CollisionCore {
     constructor(x, y, width, height, color, canvas, type, layer) {
         super();
-        this.id = allEntities.length + 1;
+        // Generate a more unique ID using timestamp and random number
+        this.id = Date.now() + Math.floor(Math.random() * 1000000);
         this.x = x;
         this.y = y;
         this.width = width;

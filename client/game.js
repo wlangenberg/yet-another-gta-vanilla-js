@@ -14,6 +14,7 @@ import socket from './src/systems/sockets.js';
 import Gun from './src/entities/player/Gun.js';
 import GameMode, { GAME_MODES } from './src/systems/GameMode.js';
 import uiManager from './src/systems/UIManager.js';
+import chatUI from './src/systems/ChatUI.js';
 
 window.addEventListener('keydown', e => {
 		keys[e.code] = true;
@@ -121,6 +122,9 @@ const startGame = async (gameMode) => {
     
     // Show game mode message
     uiManager.showGameModeMessage(`Game Mode: ${gameMode}`, 3000);
+    
+    // Initialize chat UI
+    chatUI.initialize();
 
     const levelData = await fetch('assets/levels/level.json')
         .then(response => response.json())
@@ -201,6 +205,26 @@ const startGame = async (gameMode) => {
 
 		const skyGradient = new SkyGradient(gl, sun);
 		const dayNightCycle = new DayNightCycle(sun, skyGradient);
+		
+		// Add game instructions
+		const instructions = document.createElement('div');
+		instructions.style.position = 'absolute';
+		instructions.style.top = '70px';
+		instructions.style.left = '10px';
+		instructions.style.color = 'white';
+		instructions.style.fontFamily = 'monospace';
+		instructions.style.fontSize = '14px';
+		instructions.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+		instructions.style.padding = '10px';
+		instructions.style.borderRadius = '5px';
+		instructions.innerHTML = `
+			<h3>Controls:</h3>
+			<p>WASD / Arrow Keys - Move</p>
+			<p>Left Click - Shoot</p>
+			<p>Right Click - Pick up/throw weapon</p>
+			<p>T - Toggle chat</p>
+		`;
+		document.body.appendChild(instructions);
 
 		const resizeCanvas = () => {
 			canvas.width = window.innerWidth;
@@ -286,12 +310,15 @@ const startGame = async (gameMode) => {
 					}
 				});
 	
+				// Update all entities
 				for (let i = 0; i < allEntities.length; i++) {
 					const entity = allEntities[i];
 					if (entity.update) {
 						entity.update(fixedTimeStep, allEntities, spatialGrid, camera);
-					} 
-					if ((entity?.sleeping === false) || (entity.name && entity.isLocalPlayer)) {
+					}
+					
+					// Only send updates for the local player
+					if (entity.isLocalPlayer) {
 						socket.updatePlayerState(entity);
 					}
 				}

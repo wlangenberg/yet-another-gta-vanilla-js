@@ -8,13 +8,14 @@ import { canvas } from "../../configuration/canvas.js";
 import { Animation, AnimationController } from "../../systems/Animation.js";
 
 class Player extends BaseEntity {
-    constructor(canvas, gl, { x = 600, y = 400, isLocalPlayer = true } = {}) {
+    constructor(canvas, gl, { x = 600, y = 400, isLocalPlayer = true, id = null } = {}) {
         const width = 20;
         const height = 64;
 
         super(x, y, width, height, [1.0, 1.0, 1.0, 1.0], canvas);
-        this.id = Math.floor(Math.random() * (2 ** 31));
-        this.name = "Player" + this.id;
+        // Use a more reliable ID generation method with timestamp to avoid duplicates
+        this.id = id || (isLocalPlayer ? this.generateUniqueId() : null);
+        this.name = "Player" + (this.id ? this.id.toString().substring(0, 6) : "");
         this.jumpForce = 85525;
         this.maxSpeed = 22225;
         this.friction = 0.82;
@@ -52,6 +53,15 @@ class Player extends BaseEntity {
             this.setupShooting();
             this.setupCursorChange();
         }
+    }
+
+    // Generate a unique ID using timestamp and random number
+    generateUniqueId() {
+        // Combine timestamp with a random string to ensure uniqueness
+        const timestamp = Date.now();
+        const random = Math.floor(Math.random() * 1000000);
+        // Use a numeric ID for better compatibility with server
+        return parseInt(`${timestamp}${random}`.substring(0, 9));
     }
 
     setupCursorChange() {

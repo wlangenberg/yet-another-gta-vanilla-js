@@ -1,8 +1,9 @@
 import BaseWeapon from '../core/BaseWeapon.js';
 import { AnimationController, Animation } from '../../systems/Animation.js';
 import Bullet from './Bullet.js';
-import { allEntities } from "../../configuration/constants.js";
+import { allEntities, STATE } from "../../configuration/constants.js";
 import Fragment from '../fragments/Fragment.js';
+import socket from '../../systems/sockets.js';
 
 
 class Gun extends BaseWeapon {
@@ -36,6 +37,25 @@ class Gun extends BaseWeapon {
     this.hasCollision = false
     this.sleeping = true
     this.setRenderLayer(2);
+    
+    // Send gun attachment update to server if this is the local player
+    if (player && player.isLocalPlayer) {
+      // Create a custom message to notify other clients about gun attachment
+      const gunAttachmentData = {
+        gunId: this.id,
+        playerId: player.id,
+        attachmentOffsetX: this.attachmentOffset.x,
+        attachmentOffsetY: this.attachmentOffset.y
+      };
+      
+      // Send the gun attachment data to the server
+      if (socket && socket.ws && socket.ws.readyState === WebSocket.OPEN) {
+        socket.ws.send(JSON.stringify({
+          type: 'GunAttachment',
+          data: gunAttachmentData
+        }));
+      }
+    }
   }
   
   onDrop() {
@@ -81,7 +101,7 @@ class Gun extends BaseWeapon {
     const bulletX = centerX + rotatedOffset.x;
     const bulletY = centerY + rotatedOffset.y;
     
-    // Create and spawn the bullet.
+    // Create and spawn the bullet locally
     const bullet = new Bullet(this.canvas, this.gl, {
         x: bulletX,
         y: bulletY,
@@ -90,8 +110,19 @@ class Gun extends BaseWeapon {
         damage: this.damage,
         lifetime: 2
     });
+    
+    // Set the bullet's owner to the player who fired it
+    if (this.attachedTo && this.attachedTo.id) {
+      bullet.ownerId = this.attachedTo.id;
+    }
+    
     allEntities.push(bullet);
-    this.splitEntity(bullet, allEntities)
+    this.splitEntity(bullet, allEntities);
+    
+    // If this is the local player's gun, send the gun fire event to the server
+    if (this.attachedTo && this.attachedTo.isLocalPlayer) {
+      socket.sendGunFire(bulletX, bulletY, this.rotation, this.damage);
+    }
   }
   
   update(deltaTime, allEntities, spatialGrid) {

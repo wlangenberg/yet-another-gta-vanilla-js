@@ -1,6 +1,8 @@
 import { BaseEntity } from "../core/BaseEntity.js";
 import Fragment from "../fragments/Fragment.js";
 import Platform from "../platforms/platform.js";
+import socket from "../../systems/sockets.js";
+import { STATE } from "../../configuration/constants.js";
 
 class Bullet extends BaseEntity {
   constructor(canvas, gl, { x, y, rotation, speed = 800, damage = 10, lifetime = 2 } = {}) {
@@ -14,9 +16,10 @@ class Bullet extends BaseEntity {
     this.hasGravity = false;
     this.hasCollision = true;
     this.sleeping = false;
-    this.type = 'bullet'
+    this.type = 'bullet';
     this.friction = 1;
     this.airFriction = 0.99;
+    this.ownerId = null; // ID of the player who fired this bullet
     
     // Calculate velocity based on rotation.
     this.velocity.x = Math.cos(rotation) * speed;
@@ -40,15 +43,56 @@ class Bullet extends BaseEntity {
   }
 
   onCollision(hitEntity, allEntities) {
-    // Apply damage to the hit entity if it has health
-    if (hitEntity.health !== undefined && !hitEntity.isDead && !hitEntity.invulnerable) {
-      hitEntity.takeDamage(this.damage, this);
+    // Skip collision with the owner of the bullet
+    if (hitEntity.id === this.ownerId) {
+      return;
     }
     
-    // If the hit entity is a platform, split it into fragments
-    if (hitEntity instanceof Platform) {
-      this.splitEntity(hitEntity, allEntities);
+    // Apply damage to the hit entity if it has health
+    if (hitEntity.health !== undefined && !hitEntity.isDead && !hitEntity.invulnerable) {
+      // Apply damage locally
+      hitEntity.takeDamage(this.damage, this);
+      
+      // If this is a bullet from the local player, report the hit to the server
+      if (STATE.myPlayer && this.ownerId === STATE.myPlayer.id) {
+        socket.sendHitReport(hitEntity.id, this.damage);
+      }
     }
+    
+  // If the hit entity is a platform, split it into fragments
+  if (hitEntity instanceof Platform) {
+    // If this is a bullet from the local player, notify the server about platform destruction
+    if (STATE.myPlayer && this.ownerId === STATE.myPlayer.id) {
+      socket.sendPlatformDestroy(hitEntity.id);
+      
+      // Remove the platform from entities immediately for the local player
+      const platformIndex = allEntities.indexOf(hitEntity);
+      if (platformIndex > -1) {
+        allEntities.splice(platformIndex, 1);
+      }
+      
+      // Split the platform into fragments
+      const fragments = this.splitEntity(hitEntity, allEntities);
+      
+      // If fragments were created, notify the server about fragment creation
+      if (fragments.length > 0) {
+        for (const fragment of fragments) {
+          // Set the original entity ID to track which platform this fragment came from
+          fragment.originalEntityId = hitEntity.id;
+          
+          // Generate a unique ID for the fragment if it doesn't have one
+          if (!fragment.id) {
+            fragment.id = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+          }
+          
+          // Send fragment creation message
+          socket.sendFragmentCreate(fragment);
+        }
+      }
+    }
+    // For non-local players, the platform will be removed and fragments created when
+    // the server broadcasts the platform destruction and fragment creation messages
+  }
     
     // Delete the bullet after collision
     this.deleteSelf(allEntities);
