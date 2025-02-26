@@ -40,15 +40,18 @@ class Bullet extends BaseEntity {
   }
 
   onCollision(hitEntity, allEntities) {
-    const index = allEntities.findIndex(entity => entity === hitEntity && !hitEntity.isLocalPlayer);
-    
-    if (index !== -1) {
-      allEntities.splice(index, 1); // Remove the entity from the array
-      this.deleteSelf(allEntities)
-      if (hitEntity instanceof Platform) this.splitEntity(hitEntity, allEntities)
-      
-    } else {
+    // Apply damage to the hit entity if it has health
+    if (hitEntity.health !== undefined && !hitEntity.isDead && !hitEntity.invulnerable) {
+      hitEntity.takeDamage(this.damage, this);
     }
+    
+    // If the hit entity is a platform, split it into fragments
+    if (hitEntity instanceof Platform) {
+      this.splitEntity(hitEntity, allEntities);
+    }
+    
+    // Delete the bullet after collision
+    this.deleteSelf(allEntities);
   }
 
   deleteSelf(allEntities) {

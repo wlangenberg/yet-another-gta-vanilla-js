@@ -10,8 +10,10 @@ import DayNightCycle from './src/systems/DayNightCycle.js';
 import SnowSystem from './src/systems/SnowSystem.js';
 import EntityBatchRenderer from './src/systems/EntityBatchRenderer.js';
 import Fragment from './src/entities/fragments/Fragment.js';
-import socket from './src/systems/sockets.js'
+import socket from './src/systems/sockets.js';
 import Gun from './src/entities/player/Gun.js';
+import GameMode, { GAME_MODES } from './src/systems/GameMode.js';
+import uiManager from './src/systems/UIManager.js';
 
 window.addEventListener('keydown', e => {
 		keys[e.code] = true;
@@ -45,11 +47,84 @@ function isEntityVisible(entity, camera) {
 		);
 }
 
-const run = async () => {
+// Create game mode selector UI
+function createGameModeSelector() {
+    const container = document.createElement('div');
+    container.id = 'game-mode-selector';
+    container.style.position = 'absolute';
+    container.style.top = '50%';
+    container.style.left = '50%';
+    container.style.transform = 'translate(-50%, -50%)';
+    container.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+    container.style.padding = '20px';
+    container.style.borderRadius = '10px';
+    container.style.color = 'white';
+    container.style.fontFamily = 'monospace';
+    container.style.textAlign = 'center';
+    container.style.zIndex = '1000';
+    
+    const title = document.createElement('h2');
+    title.textContent = 'Select Game Mode';
+    container.appendChild(title);
+    
+    const modeList = document.createElement('div');
+    modeList.style.display = 'flex';
+    modeList.style.flexDirection = 'column';
+    modeList.style.gap = '10px';
+    modeList.style.marginTop = '20px';
+    
+    // Free Play mode button
+    const freePlayBtn = document.createElement('button');
+    freePlayBtn.textContent = 'Free Play';
+    freePlayBtn.style.padding = '10px 20px';
+    freePlayBtn.style.fontSize = '16px';
+    freePlayBtn.style.cursor = 'pointer';
+    freePlayBtn.style.backgroundColor = '#3498db';
+    freePlayBtn.style.border = 'none';
+    freePlayBtn.style.borderRadius = '5px';
+    freePlayBtn.style.color = 'white';
+    freePlayBtn.onclick = () => {
+        startGame(GAME_MODES.FREE_PLAY);
+        container.remove();
+    };
+    modeList.appendChild(freePlayBtn);
+    
+    // Death Match mode button
+    const deathMatchBtn = document.createElement('button');
+    deathMatchBtn.textContent = 'Death Match';
+    deathMatchBtn.style.padding = '10px 20px';
+    deathMatchBtn.style.fontSize = '16px';
+    deathMatchBtn.style.cursor = 'pointer';
+    deathMatchBtn.style.backgroundColor = '#e74c3c';
+    deathMatchBtn.style.border = 'none';
+    deathMatchBtn.style.borderRadius = '5px';
+    deathMatchBtn.style.color = 'white';
+    deathMatchBtn.onclick = () => {
+        startGame(GAME_MODES.DEATH_MATCH);
+        container.remove();
+    };
+    modeList.appendChild(deathMatchBtn);
+    
+    container.appendChild(modeList);
+    document.body.appendChild(container);
+}
 
-		const levelData = await fetch('assets/levels/level.json')
-			.then(response => response.json())
-			.catch(error => console.error('Error loading level:', error));
+const run = async () => {
+    // Show game mode selector
+    createGameModeSelector();
+}
+
+const startGame = async (gameMode) => {
+    // Initialize the game mode
+    window.gameMode = new GameMode(gameMode);
+    window.gameMode.start();
+    
+    // Show game mode message
+    uiManager.showGameModeMessage(`Game Mode: ${gameMode}`, 3000);
+
+    const levelData = await fetch('assets/levels/level.json')
+        .then(response => response.json())
+        .catch(error => console.error('Error loading level:', error));
 
 		// Initialize static entities (platforms)
 		levelData.rectangles.forEach(rect => {
@@ -76,23 +151,27 @@ const run = async () => {
         
         console.log('allEntities', allEntities.length)
 
-		// Initialize the player and camera
-		const camera = (() => {
-			if (levelData.playerSpawns && levelData.playerSpawns.length > 0) {
-				const randomSpawn = levelData.playerSpawns[Math.floor(Math.random() * levelData.playerSpawns.length)];
-				STATE.myPlayer = new Player(canvas, gl, { x: randomSpawn.x, y: randomSpawn.y });
-				return new Camera(STATE.myPlayer, canvas, {
-					worldHeight: WORLD_HEIGHT,
-					smoothness: 0.02,
-					minZoom: 1,
-					maxZoom: 2,
-					zoom: 1,
-					latency: 0.1,
-					x: randomSpawn.x,
-					y: randomSpawn.y
-				});
-			}
-		})();
+    // Initialize the player and camera
+    const camera = (() => {
+        if (levelData.playerSpawns && levelData.playerSpawns.length > 0) {
+            const randomSpawn = levelData.playerSpawns[Math.floor(Math.random() * levelData.playerSpawns.length)];
+            STATE.myPlayer = new Player(canvas, gl, { x: randomSpawn.x, y: randomSpawn.y });
+            
+            // Add player to game mode
+            window.gameMode.addPlayer(STATE.myPlayer);
+            
+            return new Camera(STATE.myPlayer, canvas, {
+                worldHeight: WORLD_HEIGHT,
+                smoothness: 0.02,
+                minZoom: 1,
+                maxZoom: 2,
+                zoom: 1,
+                latency: 0.1,
+                x: randomSpawn.x,
+                y: randomSpawn.y
+            });
+        }
+    })();
 		window.camera = camera
 		const bgColor = levelData?.backgroundColor || '#ffffff';
 		const [r, g, b, a] = hexToWebGLColor(bgColor);
@@ -164,26 +243,37 @@ const run = async () => {
 		// Create a batch renderer for instanced drawing.
 		const batchRenderer = new EntityBatchRenderer(gl);
 		socket.connectOnline()
-		function gameLoop() {
-			const currentTime = performance.now();
-			let deltaTime = (currentTime - lastTime) / 1000;
-			lastTime = currentTime;
-	
-			fpsFrameCount++;
-			if (currentTime - lastFpsUpdate >= fpsUpdateInterval) {
-				displayedFPS = fpsFrameCount / ((currentTime - lastFpsUpdate) / 1000);
-				fpsCounter.innerText = `FPS: ${Math.round(displayedFPS)}`;
-				fpsFrameCount = 0;
-				lastFpsUpdate = currentTime;
-			}
-	
-			accumulatedTime += deltaTime;
-			requestAnimationFrame(gameLoop);
-	
-			gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
-			camera.update();
-	
-			const viewProjectionMatrix = camera.getViewMatrix();
+    function gameLoop() {
+        const currentTime = performance.now();
+        let deltaTime = (currentTime - lastTime) / 1000;
+        lastTime = currentTime;
+
+        fpsFrameCount++;
+        if (currentTime - lastFpsUpdate >= fpsUpdateInterval) {
+            displayedFPS = fpsFrameCount / ((currentTime - lastFpsUpdate) / 1000);
+            fpsCounter.innerText = `FPS: ${Math.round(displayedFPS)}`;
+            fpsFrameCount = 0;
+            lastFpsUpdate = currentTime;
+        }
+
+        accumulatedTime += deltaTime;
+        requestAnimationFrame(gameLoop);
+
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+        camera.update();
+
+        const viewProjectionMatrix = camera.getViewMatrix();
+        
+        // Update game mode
+        if (window.gameMode) {
+            window.gameMode.update();
+            
+            // Update UI
+            if (window.gameMode.type === GAME_MODES.DEATH_MATCH) {
+                uiManager.updateScoreboard(window.gameMode.getScoreboard());
+                uiManager.updateTimer(window.gameMode.getTimeRemaining());
+            }
+        }
 	
 			// Fixed update loop: update collisions and physics.
 			while (accumulatedTime >= fixedTimeStep) {

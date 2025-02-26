@@ -2,7 +2,8 @@
 import { BaseEntity } from "../core/BaseEntity.js";
 import Fragment from "../fragments/Fragment.js";
 import Gun from "./Gun.js"; // Import the new Gun class
-import { keys, allEntities,  STATE, LAYERS } from "../../configuration/constants.js";
+import { keys, allEntities, STATE, LAYERS } from "../../configuration/constants.js";
+import uiManager from "../../systems/UIManager.js";
 import { canvas } from "../../configuration/canvas.js";
 import { Animation, AnimationController } from "../../systems/Animation.js";
 
@@ -41,6 +42,11 @@ class Player extends BaseEntity {
         this.faceDirection = 1;
         this.rightMouseDownTime = null;
         this.rightMousePressDuration = 0;
+        
+        // Override default health values for player
+        this.maxHealth = 100;
+        this.health = this.maxHealth;
+        this.respawnDuration = 3; // 3 seconds to respawn
         if (this.isLocalPlayer) {
             this.setupMouseTracking();
             this.setupShooting();
@@ -174,6 +180,12 @@ class Player extends BaseEntity {
     }
 
     update(deltaTime, allEntities, spatialGrid) {
+        // If player is dead, only handle respawn logic
+        if (this.isDead) {
+            super.update(deltaTime, allEntities, spatialGrid);
+            return;
+        }
+        
         if (this.isLocalPlayer) {
             this.handleMovement(deltaTime, allEntities);
             this.updateWorldMousePosition(); // Update world mouse position every frame
@@ -182,8 +194,42 @@ class Player extends BaseEntity {
                 this.shoot();
             }
         }
+        
         this.animationController.update(deltaTime);
         super.update(deltaTime, allEntities, spatialGrid);
+        
+        // Update health bar if this is a player
+        if (window.camera) {
+            uiManager.updateHealthBar(this, window.camera);
+        }
+    }
+    
+    die() {
+        super.die();
+        
+        // Drop weapon if player dies
+        if (this.equippedWeapon) {
+            this.dropItem(this.equippedWeapon);
+            this.equippedWeapon = null;
+        }
+        
+        // Show death message if this is the local player
+        if (this.isLocalPlayer) {
+            let message = "You died!";
+            if (this.lastDamagedBy && this.lastDamagedBy.attachedTo) {
+                message = `You were killed by ${this.lastDamagedBy.attachedTo.name}!`;
+            }
+            uiManager.showGameModeMessage(message, 2000);
+        }
+    }
+    
+    respawn() {
+        super.respawn();
+        
+        // Show respawn message if this is the local player
+        if (this.isLocalPlayer) {
+            uiManager.showGameModeMessage("Respawned!", 1000);
+        }
     }
 
     handleMovement(interval, entities) {

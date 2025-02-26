@@ -84,7 +84,10 @@ class Socket {
         if (this.ws.readyState === 1) {
             const player = {
                 ...playerData,
-                color: JSON.stringify(playerData.color)
+                color: JSON.stringify(playerData.color),
+                health: playerData.health,
+                maxHealth: playerData.maxHealth,
+                isDead: playerData.isDead
             }
             this.ws.send(JSON.stringify(player));
         }
@@ -93,11 +96,28 @@ class Socket {
     async createPlayerFromJson(json) {
         // console.log(json)
         if (json.name) {
-
             const player = new Player(canvas, gl, { x: json.x, y: json.y, isLocalPlayer: false});
             player.id = json.id;
-            player.init(gl)
+            
+            // Set health properties if they exist
+            if (json.health !== undefined) {
+                player.health = json.health;
+            }
+            if (json.maxHealth !== undefined) {
+                player.maxHealth = json.maxHealth;
+            }
+            if (json.isDead !== undefined) {
+                player.isDead = json.isDead;
+            }
+            
+            player.init(gl);
             await player.animationsPromise;
+            
+            // Add player to game mode if it exists
+            if (window.gameMode && !window.gameMode.players.has(player.id)) {
+                window.gameMode.addPlayer(player);
+            }
+            
             return player;
         } else {
             // console.log(json.color)

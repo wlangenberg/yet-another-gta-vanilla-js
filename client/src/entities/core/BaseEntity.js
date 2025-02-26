@@ -1,5 +1,6 @@
 import { gravity, allEntities } from '../../configuration/constants.js';
 import CollisionCore from '../../systems/CollisionCore.js';
+import uiManager from '../../systems/UIManager.js';
 
 // Shared transformation matrices to avoid creating new ones each frame
 const modelMatrix = mat4.create();
@@ -47,6 +48,18 @@ class BaseEntity extends CollisionCore {
         this.defaultLayer = 1; // Store the default layer for this entity
         this.rotation = 0;
         this.isActive = false;
+        
+        // Health and damage properties
+        this.maxHealth = 100;
+        this.health = this.maxHealth;
+        this.isDead = false;
+        this.invulnerable = false;
+        this.invulnerabilityTime = 0;
+        this.invulnerabilityDuration = 1; // 1 second of invulnerability after taking damage
+        this.respawnTime = 0;
+        this.respawnDuration = 3; // 3 seconds to respawn
+        this.lastDamagedBy = null; // Track who last damaged this entity
+        
         this.updateDimensions();
     }
 
@@ -90,10 +103,32 @@ class BaseEntity extends CollisionCore {
     }
 
     onCollision(hitEntity, allEntities) {
-
+        // Handle damage from bullets
+        if (hitEntity.type === 'bullet' && !this.invulnerable && !this.isDead) {
+            this.takeDamage(hitEntity.damage, hitEntity);
+        }
     }
 
     update(interval, allEntities, spatialGrid) {
+        // Handle death and respawn
+        if (this.isDead) {
+            if (this.respawnTime > 0) {
+                this.respawnTime -= interval;
+                if (this.respawnTime <= 0) {
+                    this.respawn();
+                }
+            }
+            return;
+        }
+        
+        // Handle invulnerability
+        if (this.invulnerable) {
+            this.invulnerabilityTime -= interval;
+            if (this.invulnerabilityTime <= 0) {
+                this.invulnerable = false;
+            }
+        }
+        
         if (this.attachedTo) {
             // Update position based on attached entity
             this.x = this.attachedTo.x + this.attachmentOffset.x;
@@ -318,6 +353,76 @@ class BaseEntity extends CollisionCore {
         
         // Update mass based on physical dimensions
         this.mass = this.width * this.height;
+    }
+    
+    takeDamage(amount, source) {
+        if (this.invulnerable || this.isDead) return;
+        
+        this.health -= amount;
+        this.lastDamagedBy = source;
+        
+        // Set invulnerability
+        this.invulnerable = true;
+        this.invulnerabilityTime = this.invulnerabilityDuration;
+        
+        // Check for death
+        if (this.health <= 0) {
+            this.die();
+        }
+    }
+    
+    die() {
+        this.isDead = true;
+        this.health = 0;
+        this.hasCollision = false;
+        
+        // If this entity is a player and has a killer, record the kill
+        if (this.name && this.name.includes('Player') && this.lastDamagedBy && this.lastDamagedBy.attachedTo) {
+            const killer = this.lastDamagedBy.attachedTo;
+            if (killer && killer.name && killer.name.includes('Player')) {
+                // If there's a game mode active, record the kill
+                if (window.gameMode && window.gameMode.isActive) {
+                    window.gameMode.recordKill(killer.id, this.id);
+                }
+            }
+        }
+        
+        // Start respawn timer if this is a player
+        if (this.name && this.name.includes('Player')) {
+            this.respawnTime = this.respawnDuration;
+        }
+    }
+    
+    respawn() {
+        // Reset health and state
+        this.health = this.maxHealth;
+        this.isDead = false;
+        this.hasCollision = true;
+        this.invulnerable = true;
+        this.invulnerabilityTime = 2; // 2 seconds of spawn protection
+        
+        // If this is a player, move to a spawn point
+        if (this.name && this.name.includes('Player')) {
+            // Find a spawn point
+            fetch('assets/levels/level.json')
+                .then(response => response.json())
+                .then(levelData => {
+                    if (levelData.playerSpawns && levelData.playerSpawns.length > 0) {
+                        const randomSpawn = levelData.playerSpawns[Math.floor(Math.random() * levelData.playerSpawns.length)];
+                        this.x = randomSpawn.x;
+                        this.y = randomSpawn.y;
+                        this.velocity.x = 0;
+                        this.velocity.y = 0;
+                    }
+                })
+                .catch(error => console.error('Error loading level for respawn:', error));
+        }
+    }
+    
+    heal(amount) {
+        if (this.isDead) return;
+        
+        this.health = Math.min(this.health + amount, this.maxHealth);
     }
 
 }
