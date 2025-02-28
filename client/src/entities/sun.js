@@ -1,11 +1,11 @@
 import { LAYERS } from "../configuration/constants.js"
 import { BaseEntity } from "./core/BaseEntity.js"
+import { canvas, ctx as gl } from "../configuration/canvas.js"
 
 
 class SunWebGL extends BaseEntity {
-    constructor(x, y, width, height, canvas, gl) {
-        super(x, y, width, height, [1.0, 1.0, 0.0, 1.0], canvas, gl)
-        this.gl = gl
+    constructor({x, y, width, height}) {
+        super({x, y, width, height, color: [1.0, 1.0, 0.0, 1.0]})
         this.shadowLength = 5000
         this.cameraPos = { x: 0, y: 0 }
         // Increase update interval to reduce calculations
@@ -21,7 +21,6 @@ class SunWebGL extends BaseEntity {
     }
 
     initShaders() {
-        const gl = this.gl
         // This shader is used to render the shadow geometry into the stencil buffer
         const vsSource = `
             attribute vec2 a_position;
@@ -54,7 +53,6 @@ class SunWebGL extends BaseEntity {
     }
 
     createShader(type, source) {
-        const gl = this.gl
         const shader = gl.createShader(type)
         gl.shaderSource(shader, source)
         gl.compileShader(shader)
@@ -67,14 +65,12 @@ class SunWebGL extends BaseEntity {
     }
 
     initBuffers() {
-        const gl = this.gl
         this.shadowBuffer = gl.createBuffer()
     }
 
     // This quad program is used to darken (multiply) the entire screen in shadowed areas.
     // We modify the vertex shader so that the quad is drawn with a depth of 1.0.
     createQuadProgram() {
-        const gl = this.gl
         const vsSource = `
             attribute vec2 a_position;
             void main() {
@@ -100,7 +96,6 @@ class SunWebGL extends BaseEntity {
 
     // This program can be used later if you want to draw shadow rays (line visualization)
     createLineProgram() {
-        const gl = this.gl
         const vsSource = `
             attribute vec2 a_position;
             uniform mat4 u_matrix;
@@ -153,9 +148,9 @@ class SunWebGL extends BaseEntity {
         // Only calculate shadows for objects strictly within the camera view.
         this.viewportBounds = {
             left: camera.x - extraBound,
-            right: camera.x + this.canvas.width + extraBound,
+            right: camera.x + canvas.width + extraBound,
             top: camera.y - extraBound,
-            bottom: camera.y + this.canvas.height + extraBound
+            bottom: camera.y + canvas.height + extraBound
         }
     }
 
@@ -362,9 +357,9 @@ class SunWebGL extends BaseEntity {
 
     computeOrthoMatrix() {
         const l = this.cameraPos.x
-        const r = this.cameraPos.x + this.canvas.width
+        const r = this.cameraPos.x + canvas.width
         const t = this.cameraPos.y
-        const b = this.cameraPos.y + this.canvas.height
+        const b = this.cameraPos.y + canvas.height
         const n = -1
         const f = 1
         return new Float32Array([
@@ -419,7 +414,6 @@ class SunWebGL extends BaseEntity {
     // Render the shadow geometry to the stencil buffer and then darken the marked areas
     drawShadows(vertices) {
         if (!vertices.length) return;
-        const gl = this.gl;
     
         // Step 1: Render shadow geometry into the stencil buffer
         gl.enable(gl.DEPTH_TEST);
@@ -431,7 +425,7 @@ class SunWebGL extends BaseEntity {
         gl.colorMask(false, false, false, false); // Disable color writing
     
         // Disable depth writing to preserve the entity depth values
-        gl.depthMask(false);
+        // gl.depthMask(false);
     
         // Bind shadow buffer and upload vertex data
         gl.bindBuffer(gl.ARRAY_BUFFER, this.shadowBuffer);
@@ -453,7 +447,7 @@ class SunWebGL extends BaseEntity {
         gl.drawArrays(gl.TRIANGLES, 0, vertices.length / 3);
     
         // Re-enable depth writing now that the stencil is set up
-        gl.depthMask(true);
+        // gl.depthMask(true);
     
         // Step 2: Darken areas marked in the stencil buffer only on objects
         gl.colorMask(true, true, true, true); // Enable color writing

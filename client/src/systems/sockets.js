@@ -1,4 +1,3 @@
-
 import { STATE, allEntities, LAYERS } from '../configuration/constants.js';
 import { canvas, ctx as gl } from '../configuration/canvas.js';
 import Player from '../entities/player/player.js';
@@ -17,9 +16,12 @@ class Socket {
     ws = null;
     binaryMode = true; // Use binary protocol by default
     
+    // Track remote players by ID to prevent duplicates
+    remotePlayers = new Map();
+    
     connectOnline() {
-        const wsUrl = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') 
-            ? `ws://127.0.0.1:8081/ws` 
+        const wsUrl = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+            ? `ws://127.0.0.1:8081/ws`
             : `wss://${location.hostname}/ws`;
         
         this.ws = new WebSocket(wsUrl);
@@ -27,6 +29,12 @@ class Socket {
         this.ws.onopen = () => {
             console.log('Connected to server');
             toast.show('Connected to server');
+            
+            // Send initial player ID to server if we have a local player
+            if (STATE.myPlayer) {
+                console.log('Sending initial player ID to server:', STATE.myPlayer.id);
+                this.sendInitialPlayerID(STATE.myPlayer.id);
+            }
         };
         
         // Implement ws reconnect
@@ -62,7 +70,6 @@ class Socket {
                         return;
                     }
                 }
-                
                 // If not binary or binary decoding failed, try JSON
                 // Make sure we have a string for JSON parsing
                 let jsonData;
@@ -75,8 +82,12 @@ class Socket {
                     return;
                 }
                 
-                // const data = JSON.parse(jsonData);
-                // await this.handleJSONMessage(data);
+                try {
+                    const data = JSON.parse(jsonData);
+                    await this.handleJSONMessage(data);
+                } catch (e) {
+                    console.error('Error parsing JSON message:', e);
+                }
             } catch (error) {
                 console.error('Error processing message:', error);
             }
@@ -85,6 +96,8 @@ class Socket {
     
     // Handle binary protocol messages
     async handleBinaryMessage(data) {
+        // console.log(`Received binary message of type: ${data.type}`, data);
+        
         switch (data.type) {
             case 'PlayerUpdate':
                 await this.handlePlayerUpdate(data.player);
@@ -124,6 +137,10 @@ class Socket {
                 
             case 'FragmentDestroy':
                 this.handleFragmentDestroy(data.fragmentId);
+                break;
+                
+            case 'GunAttachment':
+                this.handleGunAttachment(data.data);
                 break;
                 
             default:
@@ -169,23 +186,25 @@ class Socket {
     
     // Handle fragment creation
     handleFragmentCreate(fragmentData) {
-        // Create a new fragment
-        const fragment = new Fragment(canvas, gl, {
+        // Create a new fragment with options
+        const fragmentOptions = {
+            id: fragmentData.id,
             x: fragmentData.x,
             y: fragmentData.y,
             width: fragmentData.width,
             height: fragmentData.height,
-            color: [fragmentData.colorR, fragmentData.colorG, fragmentData.colorB, fragmentData.colorA]
-        });
+            color: [fragmentData.colorR, fragmentData.colorG, fragmentData.colorB, fragmentData.colorA],
+            type: 'fragment',
+            layer: 1
+        };
         
-        // Set fragment properties
-        fragment.id = fragmentData.id;
+        const fragment = new Fragment(fragmentOptions);
+        
+        // Set additional fragment properties
         fragment.originalEntityId = fragmentData.originalEntityId;
         fragment.velocity.x = fragmentData.velocityX;
         fragment.velocity.y = fragmentData.velocityY;
         fragment.hasGravity = true;
-        fragment.type = 'fragment';
-        fragment.renderLayer = 1; // Ensure fragments are visible
         
         // Add fragment to entities
         allEntities.push(fragment);
@@ -220,8 +239,8 @@ class Socket {
     
     // Handle JSON messages (for backward compatibility)
     async handleJSONMessage(data) {
+        console.log('JSON')
         if (data.type === 'PlayerUpdate') {
-
             await this.handlePlayerUpdate(data.player);
         } else if (data.type === 'PlayerDisconnect') {
             this.handlePlayerDisconnect(data.id);
@@ -231,34 +250,11 @@ class Socket {
             this.handleGunAttachment(data.data);
         } else if (data.type === 'FragmentDestroy') {
             this.handleFragmentDestroy(data.fragmentId);
+        } else if (data.type === 'InitialState') {
+            await this.handleInitialState(data.players);
         } else {
             console.debug(`Unknown JSON message type: ${data.type}`);
         }
-    }
-    
-    // Handle fragment destruction
-    handleFragmentDestroy(fragmentId) {
-        if (!fragmentId) return;
-        
-        // Find the fragment
-        let fragmentIndex = -1;
-        
-        for (let i = 0; i < allEntities.length; i++) {
-            if (allEntities[i].id === fragmentId && allEntities[i].isFragment) {
-                fragmentIndex = i;
-                break;
-            }
-        }
-        
-        if (fragmentIndex === -1) {
-            console.warn(`Fragment with ID ${fragmentId} not found for destruction`);
-            return;
-        }
-        
-        // Remove the fragment from entities
-        allEntities.splice(fragmentIndex, 1);
-        
-        console.log(`Fragment ${fragmentId} destroyed`);
     }
     
     // Handle gun attachment
@@ -280,53 +276,113 @@ class Socket {
             if (gun && player) break;
         }
         
+        // If we couldn't find the gun, create a new one
+        if (!gun && player) {
+            const gunOptions = {
+                id: data.gunId,
+                x: player.x,
+                y: player.y,
+                canvas: canvas,
+                gl: gl,
+                rotation: data.rotation || 0
+            };
+            
+            gun = new Gun(gunOptions);
+            gun.init(gl);
+            allEntities.push(gun);
+            console.log(`Created new gun ${gun.id} for player ${player.id}`);
+        }
+        
         // If we found both gun and player, attach the gun to the player
         if (gun && player) {
             gun.attachedTo = player;
-            gun.attachmentOffset = { 
-                x: data.attachmentOffsetX || 30, 
-                y: data.attachmentOffsetY || -20 
+            gun.attachmentOffset = {
+                x: data.attachmentOffsetX || 30,
+                y: data.attachmentOffsetY || -20
             };
             gun.hasGravity = false;
             gun.hasCollision = false;
             gun.sleeping = true;
             gun.setRenderLayer(2);
             
+            // Set rotation if provided
+            if (data.rotation !== undefined) {
+                gun.rotation = data.rotation;
+            }
+            
             console.log(`Gun ${gun.id} attached to player ${player.id}`);
         } else {
-            console.warn(`Could not find gun ${data.gunId} or player ${data.playerId} for attachment`);
+            console.warn(`Could not find player ${data.playerId} for gun attachment`);
         }
     }
     
+    // Send gun attachment update
+    sendGunAttachment(gunId, playerId, offsetX, offsetY, rotation) {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !STATE.myPlayer) return;
+        
+        if (this.binaryMode) {
+            // Use binary protocol
+            const buffer = BinaryProtocol.encodeGunAttachment(gunId, playerId, offsetX, offsetY, rotation);
+            this.ws.send(buffer);
+        } else {
+            // Fall back to JSON
+            this.ws.send(JSON.stringify({
+                type: 'GunAttachment',
+                data: {
+                    gunId: gunId,
+                    playerId: playerId,
+                    attachmentOffsetX: offsetX,
+                    attachmentOffsetY: offsetY,
+                    rotation: rotation
+                }
+            }));
+        }
+    }
+    
+    // Interpolation settings
+    interpolationDelay = 100; // ms
+    
     // Handle player update
     async handlePlayerUpdate(playerData) {
-        if (!playerData || !playerData.id) return;
-        
-        // Skip updates for our own player
-        if (STATE.myPlayer && playerData.id === STATE.myPlayer.id) {
+        if (!playerData || !playerData.id) {
+            console.warn("Received player update with no ID");
             return;
         }
         
-        // Check if player already exists - use ID as the only identifier
-        let existingPlayerIndex = -1;
-        for (let j = 0; j < allEntities.length; j++) {
-            const entity = allEntities[j];
-            // Only check ID for player identification
-            if (entity instanceof Player && entity.id === playerData.id) {
-                existingPlayerIndex = j;
-                break;
+        // Handle updates for our own player (health updates, etc.)
+        if (STATE.myPlayer && playerData.id === STATE.myPlayer.id) {
+            console.log(`Updating local player: ${JSON.stringify(playerData)}`);
+            
+            // Update health properties
+            if (playerData.health !== undefined) {
+                STATE.myPlayer.health = playerData.health;
             }
+            if (playerData.maxHealth !== undefined) {
+                STATE.myPlayer.maxHealth = playerData.maxHealth;
+            }
+            if (playerData.isDead !== undefined) {
+                STATE.myPlayer.isDead = playerData.isDead;
+            }
+            
+            return;
         }
         
-        if (existingPlayerIndex >= 0) {
+        // Check if player already exists in our tracking map
+        const existingPlayer = this.remotePlayers.get(playerData.id);
+        const existsInAllEntities = allEntities.find((e) => e.id === playerData.id)
+        if (existingPlayer || existsInAllEntities) {
             // Update existing player instead of creating a new one
-            const existingPlayer = allEntities[existingPlayerIndex];
             
-            // Update core properties
-            existingPlayer.x = playerData.x;
-            existingPlayer.y = playerData.y;
-            existingPlayer.width = playerData.width || existingPlayer.width;
-            existingPlayer.height = playerData.height || existingPlayer.height;
+            // Store current position as previous position for interpolation
+            existingPlayer.prevX = existingPlayer.x;
+            existingPlayer.prevY = existingPlayer.y;
+            
+            // Store target position for interpolation
+            existingPlayer.targetX = playerData.x;
+            existingPlayer.targetY = playerData.y;
+            
+            // Set interpolation start time
+            existingPlayer.interpolationStartTime = performance.now();
             
             // Update health properties
             if (playerData.health !== undefined) {
@@ -339,7 +395,7 @@ class Socket {
                 existingPlayer.isDead = playerData.isDead;
             }
             
-            // Update velocity if provided (prevents jerky movement)
+            // Update velocity for prediction
             if (playerData.velocityX !== undefined) {
                 existingPlayer.velocity.x = playerData.velocityX;
             }
@@ -347,10 +403,13 @@ class Socket {
                 existingPlayer.velocity.y = playerData.velocityY;
             }
             
+            // Update width and height if provided
+            if (playerData.width) existingPlayer.width = playerData.width;
+            if (playerData.height) existingPlayer.height = playerData.height;
+            
             // Update direction and face direction if provided
             if (playerData.direction !== undefined) {
                 existingPlayer.direction = playerData.direction;
-                
                 // Make animation match direction
                 if (existingPlayer.direction !== 0) {
                     existingPlayer.animationController.play('run');
@@ -369,28 +428,63 @@ class Socket {
             existingPlayer.hasCollision = true;
             existingPlayer.sleeping = false;
             existingPlayer.type = 'player';
-            
-            // Make sure this entity is awake and not sleeping
-            existingPlayer.sleeping = false;
+            existingPlayer.isInterpolating = true;
         } else {
             // Only create a new player if it doesn't exist
-            const player = await this.createPlayerFromJson(playerData);
-            if (player instanceof Player) {
-                // Make sure the player has a valid ID
-                if (!player.id && playerData.id) {
-                    player.id = playerData.id;
-                }
-                
-                // Add player to entity list
-                allEntities.push(player);
-                
-                console.log(`Created new remote player: ${player.id || player.name}`);
+            console.log(`Creating new remote player with ID: ${playerData.id}`);
+            
+            const playerOptions = {
+                id: playerData.id,
+                x: playerData.x,
+                y: playerData.y,
+                width: playerData.width || 20,
+                height: playerData.height || 64,
+                isLocalPlayer: false,
+                direction: playerData.direction || 0,
+                faceDirection: playerData.faceDirection || 1,
+                health: playerData.health,
+                maxHealth: playerData.maxHealth,
+                isDead: playerData.isDead
+            };
+            
+            const player = new Player(playerOptions);
+            player.name = playerData.name || `Player${playerData.id.toString().substring(0, 6)}`;
+            
+            // Initialize the player
+            player.init(gl);
+            await player.animationsPromise;
+            
+            // Set up player properties
+            if (playerData.velocityX !== undefined) {
+                player.velocity.x = playerData.velocityX;
             }
+            if (playerData.velocityY !== undefined) {
+                player.velocity.y = playerData.velocityY;
+            }
+            
+            // Add player to our tracking map
+            this.remotePlayers.set(playerData.id, player);
+            
+            // Add player to entity list
+            allEntities.push(player);
+            
+            // Add player to game mode if it exists
+            if (window.gameMode && !window.gameMode.players.has(player.id)) {
+                window.gameMode.addPlayer(player);
+            }
+            
+            console.log(`Created new remote player: ${player.id} at (${player.x}, ${player.y})`);
         }
     }
     
     // Handle player disconnect
     handlePlayerDisconnect(playerId) {
+        // Remove from remotePlayers map
+        if (this.remotePlayers.has(playerId)) {
+            this.remotePlayers.delete(playerId);
+        }
+        
+        // Remove from allEntities array
         for (let j = 0; j < allEntities.length; j++) {
             if (allEntities[j].id === playerId) {
                 allEntities.splice(j, 1);
@@ -402,7 +496,31 @@ class Socket {
     
     // Handle initial state
     async handleInitialState(players) {
+        console.log("Received initial state with players:", players);
+        
+        // First, check if we need to update our local player's ID
+        if (STATE.myPlayer) {
+            // The server will send us our own player data with the server-assigned ID
+            // We need to find it and update our local player's ID
+            for (const playerData of players) {
+                // Check if this is our player (based on position or other properties)
+                // Since we don't have a reliable way to identify our player in the initial state,
+                // we'll just use the first player data for now
+                if (players.length > 0 && !STATE.myPlayer.serverIdAssigned) {
+                    console.log(`Updating local player ID from ${STATE.myPlayer.id} to server-assigned ID: ${players[0].id}`);
+                    STATE.myPlayer.id = players[0].id;
+                    STATE.myPlayer.serverIdAssigned = true;
+                    break;
+                }
+            }
+        }
+        
+        // Then process all other players
         for (const playerData of players) {
+            // Skip our own player since we already updated it
+            if (STATE.myPlayer && playerData.id === STATE.myPlayer.id) {
+                continue;
+            }
             await this.handlePlayerUpdate(playerData);
         }
     }
@@ -448,15 +566,17 @@ class Socket {
         
         if (!shooter) return;
         
-        // Create a bullet
-        const bullet = new Bullet(canvas, gl, {
-            x,
-            y,
+        // Create a bullet with options
+        const bulletOptions = {
+            x: x,
+            y: y,
             rotation: angle,
             speed: 800,
             damage: damage || 10,
             lifetime: 2
-        });
+        };
+        
+        const bullet = new Bullet(bulletOptions);
         
         // Set the bullet's owner
         bullet.ownerId = playerId;
@@ -467,9 +587,41 @@ class Socket {
     
     // Handle hit report
     handleHitReport(shooterId, targetId, damage) {
-        // Find the target
+        console.log(`Hit report: shooter ${shooterId} hit target ${targetId} for ${damage} damage`);
+        
+        // Check if the target is our local player
+        if (STATE.myPlayer && targetId === STATE.myPlayer.id) {
+            console.log(`Local player hit for ${damage} damage`);
+            // Apply damage to local player
+            if (STATE.myPlayer.health !== undefined) {
+                STATE.myPlayer.health -= damage;
+                if (STATE.myPlayer.health <= 0) {
+                    STATE.myPlayer.health = 0;
+                    STATE.myPlayer.isDead = true;
+                }
+            }
+            return;
+        }
+        
+        // Check if the target is in our remotePlayers map
+        const targetPlayer = this.remotePlayers.get(targetId);
+        if (targetPlayer) {
+            console.log(`Remote player ${targetId} hit for ${damage} damage`);
+            // Apply damage to remote player
+            if (targetPlayer.health !== undefined) {
+                targetPlayer.health -= damage;
+                if (targetPlayer.health <= 0) {
+                    targetPlayer.health = 0;
+                    targetPlayer.isDead = true;
+                }
+            }
+            return;
+        }
+        
+        // If we didn't find the player in our maps, search through all entities
         for (const entity of allEntities) {
             if (entity.id === targetId) {
+                console.log(`Entity ${targetId} hit for ${damage} damage`);
                 // Apply damage (the server has already done this, but we update the client-side representation)
                 if (entity.health !== undefined) {
                     entity.health -= damage;
@@ -483,52 +635,17 @@ class Socket {
         }
     }
 
-    // Track last sent positions to avoid sending redundant updates
-    lastSentPositions = new Map();
-    updateThreshold = 0.1; // Minimum distance to move before sending update
-    lastUpdateTime = 0;
-    updateInterval = 50; // Minimum time between updates in ms
-    
-    // Send player state update with throttling and delta checking
+    // Send player state update - simplified version
+    // Throttling and delta checking now handled by each entity
     updatePlayerState = (playerData) => {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
         
-        const now = performance.now();
-        const timeSinceLastUpdate = now - this.lastUpdateTime;
-        
-        // Skip update if not enough time has passed since last update
-        if (timeSinceLastUpdate < this.updateInterval) {
-            return;
-        }
-        
-        // Check if the entity has moved enough to warrant an update
-        const lastPos = this.lastSentPositions.get(playerData.id);
-        const hasMovedEnough = !lastPos || 
-            Math.abs(lastPos.x - playerData.x) > this.updateThreshold || 
-            Math.abs(lastPos.y - playerData.y) > this.updateThreshold ||
-            lastPos.direction !== playerData.direction ||
-            lastPos.faceDirection !== playerData.faceDirection ||
-            lastPos.health !== playerData.health ||
-            lastPos.isDead !== playerData.isDead;
-        
-        if (!hasMovedEnough) {
-            return; // Skip update if entity hasn't changed significantly
-        }
-        
-        // Update last sent position
-        this.lastSentPositions.set(playerData.id, {
-            x: playerData.x,
-            y: playerData.y,
-            direction: playerData.direction,
-            faceDirection: playerData.faceDirection,
-            health: playerData.health,
-            isDead: playerData.isDead
-        });
-        
-        this.lastUpdateTime = now;
+        // Ensure direction and faceDirection are included
+        const direction = playerData.direction !== undefined ? playerData.direction : 0;
+        const faceDirection = playerData.faceDirection !== undefined ? playerData.faceDirection : 1;
         
         if (this.binaryMode) {
-            // Extend the protocol to include additional properties
+            // Encode the player update using binary protocol
             const buffer = BinaryProtocol.encodePlayerUpdate({
                 id: playerData.id,
                 name: playerData.name,
@@ -542,26 +659,11 @@ class Socket {
                 isDead: playerData.isDead,
                 velocityX: playerData.velocity.x,
                 velocityY: playerData.velocity.y,
-                direction: playerData.direction,
-                faceDirection: playerData.faceDirection
+                direction: direction,
+                faceDirection: faceDirection
             });
             
             this.ws.send(buffer);
-        } else {
-            // Fall back to JSON with extended properties
-            const player = {
-                ...playerData,
-                color: JSON.stringify(playerData.color),
-                health: playerData.health,
-                maxHealth: playerData.maxHealth,
-                isDead: playerData.isDead,
-                velocityX: playerData.velocity.x,
-                velocityY: playerData.velocity.y,
-                direction: playerData.direction,
-                faceDirection: playerData.faceDirection
-            };
-            
-            this.ws.send(JSON.stringify(player));
         }
     }
     // Send chat message
@@ -572,13 +674,6 @@ class Socket {
             // Use binary protocol
             const buffer = BinaryProtocol.encodeChatMessage(STATE.myPlayer.id, message);
             this.ws.send(buffer);
-        } else {
-            // Fall back to JSON
-            this.ws.send(JSON.stringify({
-                type: 'ChatMessage',
-                playerId: STATE.myPlayer.id,
-                message: message
-            }));
         }
     }
     
@@ -590,16 +685,6 @@ class Socket {
             // Use binary protocol
             const buffer = BinaryProtocol.encodeGunFire(STATE.myPlayer.id, x, y, angle, damage);
             this.ws.send(buffer);
-        } else {
-            // Fall back to JSON
-            this.ws.send(JSON.stringify({
-                type: 'GunFire',
-                playerId: STATE.myPlayer.id,
-                x: x,
-                y: y,
-                angle: angle,
-                damage: damage
-            }));
         }
     }
     
@@ -611,14 +696,6 @@ class Socket {
             // Use binary protocol
             const buffer = BinaryProtocol.encodeHitReport(STATE.myPlayer.id, targetId, damage);
             this.ws.send(buffer);
-        } else {
-            // Fall back to JSON
-            this.ws.send(JSON.stringify({
-                type: 'HitReport',
-                shooterId: STATE.myPlayer.id,
-                targetId: targetId,
-                damage: damage
-            }));
         }
     }
     
@@ -630,13 +707,6 @@ class Socket {
             // Use binary protocol
             const buffer = BinaryProtocol.encodePlatformDestroy(platformId, STATE.myPlayer.id);
             this.ws.send(buffer);
-        } else {
-            // Fall back to JSON
-            this.ws.send(JSON.stringify({
-                type: 'PlatformDestroy',
-                platformId: platformId,
-                shooterId: STATE.myPlayer.id
-            }));
         }
     }
     
@@ -669,12 +739,6 @@ class Socket {
             // Use binary protocol
             const buffer = BinaryProtocol.encodeFragmentCreate(fragmentData);
             this.ws.send(buffer);
-        } else {
-            // Fall back to JSON
-            this.ws.send(JSON.stringify({
-                type: 'FragmentCreate',
-                fragment: fragmentData
-            }));
         }
     }
     
@@ -686,87 +750,25 @@ class Socket {
             // Use binary protocol
             const buffer = BinaryProtocol.encodeFragmentDestroy(fragmentId);
             this.ws.send(buffer);
-        } else {
-            // Fall back to JSON
-            this.ws.send(JSON.stringify({
-                type: 'FragmentDestroy',
-                fragmentId: fragmentId
-            }));
         }
     }
 
-    // Create player from JSON data
-    async createPlayerFromJson(json) {
-        if (!json) return null;
-
-        if (json.name && json.name.includes('Player')) {
-            // Create player entity
-            const player = new Player(canvas, gl, { 
-                x: json.x, 
-                y: json.y, 
-                isLocalPlayer: false
-            });
-            
-            player.id = json.id;
-            player.name = json.name;
-            
-            // Set health properties if they exist
-            if (json.health !== undefined) {
-                player.health = json.health;
-            }
-            if (json.maxHealth !== undefined) {
-                player.maxHealth = json.maxHealth;
-            }
-            if (json.isDead !== undefined) {
-                player.isDead = json.isDead;
-            }
-            
-            // Ensure player is properly initialized
-            player.init(gl);
-
-
-            await player.animationsPromise;
-            
-            // Make sure player is visible and properly configured
-            player.renderLayer = LAYERS.PLAYER;
-            player.hasCollision = true;
-            player.sleeping = false;
-            player.type = 'player';
-            player.color = [1.0, 1.0, 1.0, 1.0]; // Ensure proper color
-            player.setScale(8); // Set proper scale for player animations
-            
-            // Add player to game mode if it exists
-            if (window.gameMode && !window.gameMode.players.has(player.id)) {
-                window.gameMode.addPlayer(player);
-            }
-            
-            console.log(`Remote player created: ${player.id} at (${player.x}, ${player.y})`);
-            return player;
-        } else {
-            // Create platform or other entity
-            let color;
-            if (typeof json.color === 'string') {
-                try {
-                    const colorArray = JSON.parse(json.color);
-                    color = [colorArray[0], colorArray[1], colorArray[2], colorArray[3]];
-                } catch (e) {
-                    color = [1.0, 1.0, 1.0, 1.0]; // Default white
-                }
-            } else if (json.colorR !== undefined) {
-                color = [json.colorR, json.colorG, json.colorB, json.colorA];
-            } else {
-                color = [1.0, 1.0, 1.0, 1.0]; // Default white
-            }
-            
-            const entity = new Platform(json.x, json.y, json.width, json.height, color);
-            entity.id = json.id;
-            return entity;
-        }
-    }
-    
     // Get chat messages
     getChatMessages() {
         return chatMessages;
+    }
+    
+    // Send initial player ID to server
+    sendInitialPlayerID(playerId) {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+        
+        console.log('Sending initial player ID to server:', playerId);
+        
+        // For now, use JSON since we don't have a binary protocol method for this yet
+        this.ws.send(JSON.stringify({
+            type: 'InitialPlayerID',
+            clientId: playerId
+        }));
     }
 }
 

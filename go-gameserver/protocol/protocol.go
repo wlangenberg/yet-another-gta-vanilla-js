@@ -20,6 +20,7 @@ const (
 	PlatformDestroyType byte = 7
 	FragmentCreateType byte = 8
 	FragmentDestroyType byte = 9
+	GunAttachmentType byte = 10
 
 	// Server -> Client messages
 	BroadcastPlayerUpdateType byte = 101
@@ -32,23 +33,28 @@ const (
 	BroadcastPlatformDestroyType byte = 108
 	BroadcastFragmentCreateType byte = 109
 	BroadcastFragmentDestroyType byte = 110
+	BroadcastGunAttachmentType byte = 111
 )
 
 // Player represents a player in the game
 type Player struct {
-	ID        int32
-	Name      string
-	X         float32
-	Y         float32
-	Width     float32
-	Height    float32
-	ColorR    float32
-	ColorG    float32
-	ColorB    float32
-	ColorA    float32
-	Health    float32
-	MaxHealth float32
-	IsDead    bool
+	ID           int32
+	Name         string
+	X            float32
+	Y            float32
+	Width        float32
+	Height       float32
+	ColorR       float32
+	ColorG       float32
+	ColorB       float32
+	ColorA       float32
+	Health       float32
+	MaxHealth    float32
+	IsDead       bool
+	Direction    float32
+	FaceDirection int32
+	VelocityX    float32
+	VelocityY    float32
 }
 
 // ChatMessage represents a chat message
@@ -93,6 +99,15 @@ type Fragment struct {
 	ColorG         float32
 	ColorB         float32
 	ColorA         float32
+}
+
+// GunAttachment represents a gun attachment to a player
+type GunAttachment struct {
+	GunID    int32
+	PlayerID int32
+	OffsetX  float32
+	OffsetY  float32
+	Rotation float32
 }
 
 // Message is the interface for all protocol messages
@@ -183,6 +198,22 @@ func (m PlayerUpdateMessage) Encode() ([]byte, error) {
 		return nil, err
 	}
 	
+	// Write player direction and face direction
+	if err := binary.Write(buf, binary.LittleEndian, m.Player.Direction); err != nil {
+		return nil, err
+	}
+	if err := binary.Write(buf, binary.LittleEndian, m.Player.FaceDirection); err != nil {
+		return nil, err
+	}
+	
+	// Write player velocity
+	if err := binary.Write(buf, binary.LittleEndian, m.Player.VelocityX); err != nil {
+		return nil, err
+	}
+	if err := binary.Write(buf, binary.LittleEndian, m.Player.VelocityY); err != nil {
+		return nil, err
+	}
+	
 	return buf.Bytes(), nil
 }
 
@@ -260,6 +291,22 @@ func (m BroadcastPlayerUpdateMessage) Encode() ([]byte, error) {
 		isDead = 1
 	}
 	if err := binary.Write(buf, binary.LittleEndian, isDead); err != nil {
+		return nil, err
+	}
+	
+	// Write player direction and face direction
+	if err := binary.Write(buf, binary.LittleEndian, m.Player.Direction); err != nil {
+		return nil, err
+	}
+	if err := binary.Write(buf, binary.LittleEndian, m.Player.FaceDirection); err != nil {
+		return nil, err
+	}
+	
+	// Write player velocity
+	if err := binary.Write(buf, binary.LittleEndian, m.Player.VelocityX); err != nil {
+		return nil, err
+	}
+	if err := binary.Write(buf, binary.LittleEndian, m.Player.VelocityY); err != nil {
 		return nil, err
 	}
 	
@@ -664,6 +711,22 @@ func (m InitialStateMessage) Encode() ([]byte, error) {
 		if err := binary.Write(buf, binary.LittleEndian, isDead); err != nil {
 			return nil, err
 		}
+		
+		// Write player direction and face direction
+		if err := binary.Write(buf, binary.LittleEndian, player.Direction); err != nil {
+			return nil, err
+		}
+		if err := binary.Write(buf, binary.LittleEndian, player.FaceDirection); err != nil {
+			return nil, err
+		}
+		
+		// Write player velocity
+		if err := binary.Write(buf, binary.LittleEndian, player.VelocityX); err != nil {
+			return nil, err
+		}
+		if err := binary.Write(buf, binary.LittleEndian, player.VelocityY); err != nil {
+			return nil, err
+		}
 	}
 	
 	return buf.Bytes(), nil
@@ -697,6 +760,8 @@ func DecodeMessage(data []byte) (Message, error) {
 		return decodeFragmentCreateMessage(reader)
 	case FragmentDestroyType:
 		return decodeFragmentDestroyMessage(reader)
+	case GunAttachmentType:
+		return decodeGunAttachmentMessage(reader)
 	default:
 		return nil, errors.New("unknown message type")
 	}
@@ -763,6 +828,37 @@ func decodePlayerUpdateMessage(reader *bytes.Reader) (Message, error) {
 		return nil, err
 	}
 	player.IsDead = isDead != 0
+	
+	// Try to read direction and face direction
+	// These might not be present in older messages, so handle errors gracefully
+	if err := binary.Read(reader, binary.LittleEndian, &player.Direction); err != nil {
+		// If we can't read these fields, they might not be present in older messages
+		// Just set default values and return what we have so far
+		player.Direction = 0
+		player.FaceDirection = 1
+		player.VelocityX = 0
+		player.VelocityY = 0
+		return PlayerUpdateMessage{Player: player}, nil
+	}
+	
+	if err := binary.Read(reader, binary.LittleEndian, &player.FaceDirection); err != nil {
+		player.FaceDirection = 1
+		player.VelocityX = 0
+		player.VelocityY = 0
+		return PlayerUpdateMessage{Player: player}, nil
+	}
+	
+	// Try to read velocity
+	if err := binary.Read(reader, binary.LittleEndian, &player.VelocityX); err != nil {
+		player.VelocityX = 0
+		player.VelocityY = 0
+		return PlayerUpdateMessage{Player: player}, nil
+	}
+	
+	if err := binary.Read(reader, binary.LittleEndian, &player.VelocityY); err != nil {
+		player.VelocityY = 0
+		return PlayerUpdateMessage{Player: player}, nil
+	}
 	
 	return PlayerUpdateMessage{Player: player}, nil
 }
@@ -1167,6 +1263,109 @@ func decodeFragmentCreateMessage(reader *bytes.Reader) (Message, error) {
 	}
 	
 	return FragmentCreateMessage{Fragment: fragment}, nil
+}
+
+// GunAttachmentMessage is sent when a gun is attached to a player
+type GunAttachmentMessage struct {
+	Attachment GunAttachment
+}
+
+func (m GunAttachmentMessage) Type() byte {
+	return GunAttachmentType
+}
+
+func (m GunAttachmentMessage) Encode() ([]byte, error) {
+	buf := new(bytes.Buffer)
+	
+	// Write message type
+	if err := binary.Write(buf, binary.LittleEndian, m.Type()); err != nil {
+		return nil, err
+	}
+	
+	// Write gun and player IDs
+	if err := binary.Write(buf, binary.LittleEndian, m.Attachment.GunID); err != nil {
+		return nil, err
+	}
+	if err := binary.Write(buf, binary.LittleEndian, m.Attachment.PlayerID); err != nil {
+		return nil, err
+	}
+	
+	// Write attachment offset and rotation
+	if err := binary.Write(buf, binary.LittleEndian, m.Attachment.OffsetX); err != nil {
+		return nil, err
+	}
+	if err := binary.Write(buf, binary.LittleEndian, m.Attachment.OffsetY); err != nil {
+		return nil, err
+	}
+	if err := binary.Write(buf, binary.LittleEndian, m.Attachment.Rotation); err != nil {
+		return nil, err
+	}
+	
+	return buf.Bytes(), nil
+}
+
+// BroadcastGunAttachmentMessage is sent to all clients when a gun is attached to a player
+type BroadcastGunAttachmentMessage struct {
+	Attachment GunAttachment
+}
+
+func (m BroadcastGunAttachmentMessage) Type() byte {
+	return BroadcastGunAttachmentType
+}
+
+func (m BroadcastGunAttachmentMessage) Encode() ([]byte, error) {
+	buf := new(bytes.Buffer)
+	
+	// Write message type
+	if err := binary.Write(buf, binary.LittleEndian, m.Type()); err != nil {
+		return nil, err
+	}
+	
+	// Write gun and player IDs
+	if err := binary.Write(buf, binary.LittleEndian, m.Attachment.GunID); err != nil {
+		return nil, err
+	}
+	if err := binary.Write(buf, binary.LittleEndian, m.Attachment.PlayerID); err != nil {
+		return nil, err
+	}
+	
+	// Write attachment offset and rotation
+	if err := binary.Write(buf, binary.LittleEndian, m.Attachment.OffsetX); err != nil {
+		return nil, err
+	}
+	if err := binary.Write(buf, binary.LittleEndian, m.Attachment.OffsetY); err != nil {
+		return nil, err
+	}
+	if err := binary.Write(buf, binary.LittleEndian, m.Attachment.Rotation); err != nil {
+		return nil, err
+	}
+	
+	return buf.Bytes(), nil
+}
+
+func decodeGunAttachmentMessage(reader *bytes.Reader) (Message, error) {
+	var attachment GunAttachment
+	
+	// Read gun and player IDs
+	if err := binary.Read(reader, binary.LittleEndian, &attachment.GunID); err != nil {
+		return nil, err
+	}
+	if err := binary.Read(reader, binary.LittleEndian, &attachment.PlayerID); err != nil {
+		return nil, err
+	}
+	
+	// Read attachment offset and rotation
+	if err := binary.Read(reader, binary.LittleEndian, &attachment.OffsetX); err != nil {
+		return nil, err
+	}
+	if err := binary.Read(reader, binary.LittleEndian, &attachment.OffsetY); err != nil {
+		return nil, err
+	}
+	if err := binary.Read(reader, binary.LittleEndian, &attachment.Rotation); err != nil {
+		return nil, err
+	}
+	
+	return GunAttachmentMessage{Attachment: attachment}, nil
 }
 
 // ParseColorString parses a color string in the format "[r,g,b,a]" into separate components

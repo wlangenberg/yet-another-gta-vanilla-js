@@ -4,11 +4,35 @@ import Bullet from './Bullet.js';
 import { allEntities, STATE } from "../../configuration/constants.js";
 import Fragment from '../fragments/Fragment.js';
 import socket from '../../systems/sockets.js';
+import { canvas, ctx as gl } from '../../configuration/canvas.js';
 
 
 class Gun extends BaseWeapon {
-  constructor(canvas, gl, { x = 0, y = 0, name = 'Gun', damage = 10, range = 50 } = {}) {
-    super(x, y, 50, 50, [0.0, 1.0, 1.0, 1.0], canvas);
+  constructor(options = {}) {
+    // Extract options with defaults
+    const {
+      x = 0,
+      y = 0,
+      name = 'Gun',
+      damage = 10,
+      range = 50,
+      rotation = 0,
+      id = null
+    } = options;
+    
+    // Call parent constructor with options
+    super({
+      id: id || Date.now() + Math.floor(Math.random() * 1000000),
+      x,
+      y,
+      width: 50,
+      height: 50,
+      color: [0.0, 1.0, 1.0, 1.0],
+      type: 'gun',
+      layer: 0,
+      rotation
+    });
+    
     this.name = null;
     this.damage = damage;
     this.range = range;
@@ -16,46 +40,29 @@ class Gun extends BaseWeapon {
     this.fireDelay = 1000 / this.fireRate;
     this.lastFired = 0;
     this.pickupable = true;
-    this.x = x;
-    this.y = y;
-    this.canvas = canvas;
-    this.gl = gl;
     this.texture = new Image();
     this.texture.src = 'assets/images/gun.png';
-    this.defaultLayer = 0;
-    this.renderLayer = this.defaultLayer;
-    this.rotation = 0;
     this.animationsPromise = this.addVisuals();
     this.hasCollision = true;
     this.sleeping = false;
-    this.shootForce = 1000
-    this.type = 'gun'
+    this.shootForce = 1000;
   }
 
   onPickup(player) {
     this.hasGravity = false
     this.hasCollision = false
-    this.sleeping = true
+    this.sleeping = false // Keep it awake for network updates
     this.setRenderLayer(2);
+    socket.sendGunAttachment(
+        this.id,
+        this.attachedTo.id,
+        this.attachmentOffset.x,
+        this.attachmentOffset.y,
+        this.rotation || 0
+    );
     
-    // Send gun attachment update to server if this is the local player
-    if (player && player.isLocalPlayer) {
-      // Create a custom message to notify other clients about gun attachment
-      const gunAttachmentData = {
-        gunId: this.id,
-        playerId: player.id,
-        attachmentOffsetX: this.attachmentOffset.x,
-        attachmentOffsetY: this.attachmentOffset.y
-      };
-      
-      // Send the gun attachment data to the server
-      if (socket && socket.ws && socket.ws.readyState === WebSocket.OPEN) {
-        socket.ws.send(JSON.stringify({
-          type: 'GunAttachment',
-          data: gunAttachmentData
-        }));
-      }
-    }
+    // The network update will be handled by the sendNetworkUpdate method
+    // in BaseEntity, which is called during the update cycle
   }
   
   onDrop() {
@@ -64,11 +71,18 @@ class Gun extends BaseWeapon {
     this.attachedTo = null
     this.type = 'gun'
     this.resetRenderLayer();
+    socket.sendGunAttachment(
+      this.id,
+      this.attachedTo.id,
+      this.attachmentOffset.x,
+      this.attachmentOffset.y,
+      this.rotation || 0
+  );
   }
 
   async addVisuals() {
     const gunAnimationFrames = ['assets/images/gun.png'];
-    this.gunAnimation = new Animation(this.gl, gunAnimationFrames);
+    this.gunAnimation = new Animation(gl, gunAnimationFrames);
     await this.gunAnimation.loadFrames(gunAnimationFrames);
     this.animationController = new AnimationController();
     this.animationController.addAnimation('default2', this.gunAnimation);
@@ -102,13 +116,13 @@ class Gun extends BaseWeapon {
     const bulletY = centerY + rotatedOffset.y;
     
     // Create and spawn the bullet locally
-    const bullet = new Bullet(this.canvas, this.gl, {
+    const bullet = new Bullet({
         x: bulletX,
         y: bulletY,
         rotation: this.rotation,
         speed: this.shootForce,
         damage: this.damage,
-        lifetime: 2
+        lifetime: 2,
     });
     
     // Set the bullet's owner to the player who fired it
@@ -129,8 +143,12 @@ class Gun extends BaseWeapon {
     if (this.attachedTo) {
       this.x = this.attachedTo.x + this.attachmentOffset.x;
       this.y = this.attachedTo.y + this.attachmentOffset.y;
+      
+      // Set network update properties for guns
+      this.updateThreshold = 0.1; // Position threshold
+      this.updateInterval = 50; // Less frequent updates than player
     }
-    
+
     this.animationController.update(deltaTime);
     super.update(deltaTime, allEntities, spatialGrid);
   }
@@ -144,7 +162,7 @@ class Gun extends BaseWeapon {
         for (let col = 0; col < 1; col++) {
             const fragmentX = entity.x + col * newWidth;
             const fragmentY = entity.y + row * newHeight;
-            const fragment = new Fragment(entity.canvas, entity.gl, {
+            const fragment = new Fragment({
                 x: fragmentX,
                 y: fragmentY,
                 width: newWidth,

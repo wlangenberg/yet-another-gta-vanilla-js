@@ -12,6 +12,7 @@ const MessageTypes = {
     PLATFORM_DESTROY: 7,
     FRAGMENT_CREATE: 8,
     FRAGMENT_DESTROY: 9,
+    GUN_ATTACHMENT: 10,
 
     // Server -> Client messages
     BROADCAST_PLAYER_UPDATE: 101,
@@ -23,14 +24,15 @@ const MessageTypes = {
     INITIAL_STATE: 107,
     BROADCAST_PLATFORM_DESTROY: 108,
     BROADCAST_FRAGMENT_CREATE: 109,
-    BROADCAST_FRAGMENT_DESTROY: 110
+    BROADCAST_FRAGMENT_DESTROY: 110,
+    BROADCAST_GUN_ATTACHMENT: 111
 };
 
 // Encode a player update message
 function encodePlayerUpdate(player) {
     // Calculate buffer size
     const nameBytes = new TextEncoder().encode(player.name || '');
-    const bufferSize = 
+    const bufferSize =
         1 + // Message type
         4 + // Player ID
         4 + // Name length
@@ -45,7 +47,11 @@ function encodePlayerUpdate(player) {
         4 + // Color A
         4 + // Health
         4 + // Max Health
-        1;  // Is Dead
+        1 + // Is Dead
+        4 + // Direction
+        4 + // FaceDirection
+        4 + // VelocityX
+        4;  // VelocityY
 
     // Create buffer
     const buffer = new ArrayBuffer(bufferSize);
@@ -118,6 +124,20 @@ function encodePlayerUpdate(player) {
     // Write player is dead flag
     view.setUint8(offset, player.isDead ? 1 : 0);
     offset += 1;
+
+    // Write player direction and face direction
+    view.setFloat32(offset, player.direction || 0, true);
+    offset += 4;
+    
+    view.setInt32(offset, player.faceDirection || 1, true);
+    offset += 4;
+    
+    // Write player velocity
+    view.setFloat32(offset, player.velocityX || 0, true);
+    offset += 4;
+    
+    view.setFloat32(offset, player.velocityY || 0, true);
+    offset += 4;
 
     return buffer;
 }
@@ -373,6 +393,9 @@ function decodeMessage(buffer) {
             
         case MessageTypes.BROADCAST_FRAGMENT_DESTROY:
             return decodeBroadcastFragmentDestroy(view, offset);
+            
+        case MessageTypes.BROADCAST_GUN_ATTACHMENT:
+            return decodeBroadcastGunAttachment(view, offset);
         
         default:
             console.error("Unknown message type:", messageType);
@@ -511,6 +534,31 @@ function decodeBroadcastPlayerUpdate(view, offset) {
     // Read player is dead flag
     player.isDead = view.getUint8(offset) !== 0;
     offset += 1;
+
+    // Try to read direction and face direction
+    try {
+        // Read player direction and face direction
+        player.direction = view.getFloat32(offset, true);
+        offset += 4;
+        
+        player.faceDirection = view.getInt32(offset, true);
+        offset += 4;
+        
+        // Read player velocity
+        player.velocityX = view.getFloat32(offset, true);
+        offset += 4;
+        
+        player.velocityY = view.getFloat32(offset, true);
+        offset += 4;
+    } catch (e) {
+        // If we can't read these fields, they might not be present in older messages
+        // Just set default values
+        console.log("Could not read direction/velocity fields, using defaults");
+        player.direction = 0;
+        player.faceDirection = 1;
+        player.velocityX = 0;
+        player.velocityY = 0;
+    }
 
     return {
         type: 'PlayerUpdate',
@@ -680,6 +728,31 @@ function decodeInitialState(view, offset) {
         player.isDead = view.getUint8(offset) !== 0;
         offset += 1;
 
+        // Try to read direction and face direction
+        try {
+            // Read player direction and face direction
+            player.direction = view.getFloat32(offset, true);
+            offset += 4;
+            
+            player.faceDirection = view.getInt32(offset, true);
+            offset += 4;
+            
+            // Read player velocity
+            player.velocityX = view.getFloat32(offset, true);
+            offset += 4;
+            
+            player.velocityY = view.getFloat32(offset, true);
+            offset += 4;
+        } catch (e) {
+            // If we can't read these fields, they might not be present in older messages
+            // Just set default values
+            console.log("Could not read direction/velocity fields in InitialState, using defaults");
+            player.direction = 0;
+            player.faceDirection = 1;
+            player.velocityX = 0;
+            player.velocityY = 0;
+        }
+
         players.push(player);
     }
 
@@ -700,6 +773,74 @@ function decodeBroadcastFragmentDestroy(view, offset) {
         fragmentId: fragmentId
     };
 }
+// Encode a gun attachment message
+function encodeGunAttachment(gunId, playerId, offsetX, offsetY, rotation) {
+    const bufferSize =
+        1 + // Message type
+        4 + // Gun ID
+        4 + // Player ID
+        4 + // Offset X
+        4 + // Offset Y
+        4;  // Rotation
+
+    const buffer = new ArrayBuffer(bufferSize);
+    const view = new DataView(buffer);
+    let offset = 0;
+
+    // Write message type
+    view.setUint8(offset, MessageTypes.GUN_ATTACHMENT);
+    offset += 1;
+
+    // Write gun and player IDs
+    view.setInt32(offset, gunId, true);
+    offset += 4;
+    
+    view.setInt32(offset, playerId, true);
+    offset += 4;
+
+    // Write attachment offset and rotation
+    view.setFloat32(offset, offsetX, true);
+    offset += 4;
+    
+    view.setFloat32(offset, offsetY, true);
+    offset += 4;
+    
+    view.setFloat32(offset, rotation, true);
+    offset += 4;
+
+    return buffer;
+}
+
+// Decode a broadcast gun attachment message
+function decodeBroadcastGunAttachment(view, offset) {
+    // Read gun and player IDs
+    const gunId = view.getInt32(offset, true);
+    offset += 4;
+    
+    const playerId = view.getInt32(offset, true);
+    offset += 4;
+
+    // Read attachment offset and rotation
+    const offsetX = view.getFloat32(offset, true);
+    offset += 4;
+    
+    const offsetY = view.getFloat32(offset, true);
+    offset += 4;
+    
+    const rotation = view.getFloat32(offset, true);
+    offset += 4;
+
+    return {
+        type: 'GunAttachment',
+        data: {
+            gunId: gunId,
+            playerId: playerId,
+            attachmentOffsetX: offsetX,
+            attachmentOffsetY: offsetY,
+            rotation: rotation
+        }
+    };
+}
 
 export default {
     MessageTypes,
@@ -710,5 +851,6 @@ export default {
     encodePlatformDestroy,
     encodeFragmentCreate,
     encodeFragmentDestroy,
+    encodeGunAttachment,
     decodeMessage
 };

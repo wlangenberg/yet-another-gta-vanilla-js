@@ -1,8 +1,8 @@
 import { BaseEntity } from "./BaseEntity.js";
 
 class BaseWeapon extends BaseEntity {
-  constructor(x, y, width, height, color, canvas) {
-    super(x, y, width, height, color, canvas);
+  constructor({x, y, width, height, color}) {
+    super({x, y, width, height, color});
     this.name = 'Base Weapon';
     this.damage = 0;
     this.range = 0;

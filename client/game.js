@@ -129,11 +129,13 @@ const startGame = async (gameMode) => {
     const levelData = await fetch('assets/levels/level.json')
         .then(response => response.json())
         .catch(error => console.error('Error loading level:', error));
-
+		let i = 0
 		// Initialize static entities (platforms)
 		levelData.rectangles.forEach(rect => {
-            const platform = new Platform(rect.x, rect.y, rect.width, rect.height, hexToWebGLColor(rect.color), canvas, rect.type, rect.layer)
+			
+            const platform = new Platform({ id: 10000000 + i, x: rect.x, y: rect.y, width: rect.width, height: rect.height, color: hexToWebGLColor(rect.color), type: rect.type, layer: rect.layer})
 			allEntities.push(platform);
+			i ++
             // const newWidth = platform.width / 2;
             // const newHeight = platform.height / 2;
             // for (let row = 0; row < 2; row++) {
@@ -159,7 +161,7 @@ const startGame = async (gameMode) => {
     const camera = (() => {
         if (levelData.playerSpawns && levelData.playerSpawns.length > 0) {
             const randomSpawn = levelData.playerSpawns[Math.floor(Math.random() * levelData.playerSpawns.length)];
-            STATE.myPlayer = new Player(canvas, gl, { x: randomSpawn.x, y: randomSpawn.y });
+            STATE.myPlayer = new Player({ x: randomSpawn.x, y: randomSpawn.y });
             
             // Add player to game mode
             window.gameMode.addPlayer(STATE.myPlayer);
@@ -194,14 +196,14 @@ const startGame = async (gameMode) => {
 
 		gunSpawnLocations.forEach(async location => {
 
-			const gun = new Gun(canvas, gl, location);
+			const gun = new Gun(location);
 			await gun.animationsPromise
 			allEntities.push(gun);
 		});
 		// Initialize WebGL shared resources for entities.
 		allEntities.push(STATE.myPlayer);
 		allEntities.forEach(entity => entity.init(gl));
-		const sun = new SunWebGL(WORLD_WIDTH / 2, -1200, 350, 350, canvas, gl);
+		const sun = new SunWebGL({ x: WORLD_WIDTH / 2, y: -1200, width: 350, height: 350});
 
 		const skyGradient = new SkyGradient(gl, sun);
 		const dayNightCycle = new DayNightCycle(sun, skyGradient);
@@ -317,10 +319,7 @@ const startGame = async (gameMode) => {
 						entity.update(fixedTimeStep, allEntities, spatialGrid, camera);
 					}
 					
-					// Only send updates for the local player
-					if (entity.isLocalPlayer) {
-						socket.updatePlayerState(entity);
-					}
+					// Entity updates are now handled by each entity's update method
 				}
 				dayNightCycle.update(lastTime);
 				// snowSystem.update(fixedTimeStep, snowList, spatialGrid);

@@ -4,17 +4,42 @@ import Fragment from "../fragments/Fragment.js";
 import Gun from "./Gun.js"; // Import the new Gun class
 import { keys, allEntities, STATE, LAYERS } from "../../configuration/constants.js";
 import uiManager from "../../systems/UIManager.js";
-import { canvas } from "../../configuration/canvas.js";
 import { Animation, AnimationController } from "../../systems/Animation.js";
+import { canvas, ctx as gl } from "../../configuration/canvas.js";
 
 class Player extends BaseEntity {
-    constructor(canvas, gl, { x = 600, y = 400, isLocalPlayer = true, id = null } = {}) {
-        const width = 20;
-        const height = 64;
+    constructor(options = {}) {
+        // Extract options with defaults
+        const {
+            x = 600,
+            y = 400,
+            isLocalPlayer = true,
+            id = Date.now() + Math.floor(Math.random() * 1000000),
+            width = 20,
+            height = 64,
+            direction = 0,
+            faceDirection = 1,
+            health = 100,
+            maxHealth = 100,
+            isDead = false
+        } = options;
 
-        super(x, y, width, height, [1.0, 1.0, 1.0, 1.0], canvas);
-        // Use a more reliable ID generation method with timestamp to avoid duplicates
-        this.id = id || (isLocalPlayer ? this.generateUniqueId() : null);
+        // Call parent constructor with options
+        super({
+            id,
+            x,
+            y,
+            width,
+            height,
+            color: [1.0, 1.0, 1.0, 1.0],
+            type: 'player',
+            layer: 1,
+            direction,
+            faceDirection,
+            health,
+            maxHealth,
+            isDead
+        });
         this.name = "Player" + (this.id ? this.id.toString().substring(0, 6) : "");
         this.jumpForce = 85525;
         this.maxSpeed = 22225;
@@ -22,32 +47,33 @@ class Player extends BaseEntity {
         this.airFriction = 0.85;
         this.baseAcceleration = 20.0;
         this.maxAcceleration = 1550;
-        this.direction = 0;
         this.grounded = false;
         this.runTime = 0;
         this.movingStartTime = null;
         this.initialBoostFactor = 60;
         this.jumpMomentum = 0;
         this.hasGravity = true;
-        this.isLocalPlayer = isLocalPlayer
+        this.isLocalPlayer = isLocalPlayer;
         this.animationController = new AnimationController();
-        this.showHitbox = true
-        this.animationsPromise = this.loadAnimations(gl)
+        this.showHitbox = true;
+        this.animationsPromise = this.loadAnimations(gl);
         this.equippedWeapon = null;
-        this.renderLayer = 1;
         this.mousePosition = { x: 0, y: 0 };
         this.worldMousePosition = { x: 0, y: 0 };
-        this.shooting = false
-        this.sleeping = false
-        this.hasCollision = true
-        this.faceDirection = 1;
+        this.shooting = false;
+        this.sleeping = false;
+        this.hasCollision = true;
         this.rightMouseDownTime = null;
         this.rightMousePressDuration = 0;
         
+        // Flag to track if the server has assigned an ID
+        this.serverIdAssigned = !isLocalPlayer;
+        
         // Override default health values for player
-        this.maxHealth = 100;
-        this.health = this.maxHealth;
+        this.maxHealth = maxHealth;
+        this.health = health;
         this.respawnDuration = 3; // 3 seconds to respawn
+        
         if (this.isLocalPlayer) {
             this.setupMouseTracking();
             this.setupShooting();
@@ -76,7 +102,7 @@ class Player extends BaseEntity {
 
     setupMouseTracking() {
         window.addEventListener('mousemove', (e) => {
-            const rect = this.canvas.getBoundingClientRect();
+            const rect = canvas.getBoundingClientRect();
             this.mousePosition = {
                 x: e.clientX - rect.left,
                 y: e.clientY - rect.top
@@ -111,24 +137,34 @@ class Player extends BaseEntity {
     }
 
     async loadAnimations(gl) {
-        // Load idle animation
-        const idleFrames = Array.from({ length: 4 }, (_, i) => `assets/images/man/idle2/_${i}.png`);
-        const idleAnimation = new Animation(gl, idleFrames, 0.2); // 0.2 seconds per frame
-        await idleAnimation.loadFrames(idleFrames)
-        
-        // Load run animation
-        const runFrames = Array.from({ length: 6 }, (_, i) => `assets/images/man/run2/_${i}.png`);
-        const runAnimation = new Animation(gl, runFrames, 0.1); // 0.1 seconds per frame
-        await runAnimation.loadFrames(runFrames)
-        
-        const { height, width } = idleAnimation.frames?.[0] ?? {}
-        
-        this.height = 70
-        this.width = 50
-        this.setScale(8)
-        // Add animations to controller
-        this.animationController.addAnimation('idle', idleAnimation);
-        this.animationController.addAnimation('run', runAnimation);
+        try {
+            // Load idle animation
+            const idleFrames = Array.from({ length: 4 }, (_, i) => `assets/images/man/idle2/_${i}.png`);
+            const idleAnimation = new Animation(gl, idleFrames, 0.2); // 0.2 seconds per frame
+            await idleAnimation.loadFrames(idleFrames);
+            
+            // Load run animation
+            const runFrames = Array.from({ length: 6 }, (_, i) => `assets/images/man/run2/_${i}.png`);
+            const runAnimation = new Animation(gl, runFrames, 0.1); // 0.1 seconds per frame
+            await runAnimation.loadFrames(runFrames);
+            
+            const { height, width } = idleAnimation.frames?.[0] ?? {};
+            
+            this.height = 70;
+            this.width = 50;
+            this.setScale(8);
+            
+            // Add animations to controller
+            this.animationController.addAnimation('idle', idleAnimation);
+            this.animationController.addAnimation('run', runAnimation);
+            
+            // Set initial animation
+            this.animationController.play('idle');
+            
+            console.log(`Player ${this.id} animations loaded successfully`);
+        } catch (error) {
+            console.error(`Error loading animations for player ${this.id}:`, error);
+        }
     }
 
     setupShooting() {
@@ -202,6 +238,34 @@ class Player extends BaseEntity {
             this.updateGunRotation();
             if (this.shooting) {
                 this.shoot();
+            }
+            
+            // Set network update properties for local player
+            this.updateThreshold = 0.05; // More sensitive threshold for player
+            this.updateInterval = 16; // More frequent updates (~60 per second)
+        } else {
+            // For remote players, apply a simple prediction based on velocity
+            // This helps smooth movement between updates
+            if (!this.isInterpolating && !this.isDead) {
+                // Apply velocity-based prediction for remote players
+                this.x += this.velocity.x * deltaTime;
+                this.y += this.velocity.y * deltaTime;
+                
+                // Apply gravity and friction similar to local player
+                if (this.hasGravity) {
+                    this.velocity.y += this.gravity * deltaTime;
+                }
+                
+                if (this.grounded) {
+                    this.velocity.x *= this.friction;
+                } else {
+                    this.velocity.x *= this.airFriction;
+                }
+                
+                // If velocity is very small, set it to 0
+                if (Math.abs(this.velocity.x) < 0.01) {
+                    this.velocity.x = 0;
+                }
             }
         }
         
@@ -322,7 +386,14 @@ class Player extends BaseEntity {
             
             // The final gun angle is the base angle plus the clamped relative angle.
             const finalAngle = baseAngle + relativeAngle;
-            this.equippedWeapon.rotation = finalAngle;
+            
+            // Only update if rotation has changed significantly
+            if (Math.abs(this.equippedWeapon.rotation - finalAngle) > 0.1) {
+                this.equippedWeapon.rotation = finalAngle;
+                
+                // Network updates will be handled by the gun's sendNetworkUpdate method
+                // which is called during its update cycle
+            }
         }
     }
 
@@ -360,6 +431,9 @@ class Player extends BaseEntity {
             // Attach the new weapon to the player's hand
             item.attachedTo = this;
             item.attachmentOffset = { x: 30, y: -20 }; // Adjust these values based on your art
+            
+            // Network updates will be handled by the gun's sendNetworkUpdate method
+            // which is called during its update cycle
         }
 
         if (item instanceof Gun) {
@@ -379,32 +453,6 @@ class Player extends BaseEntity {
         } else {
             console.log('No weapon equipped');
         }
-    }
-
-    splitEntity(entity) {
-        const fragments = [];
-        // Split the entity into 4 pieces (2x2 grid).
-        const newWidth = entity.width / 2;
-        const newHeight = entity.height / 2;
-        for (let row = 0; row < 2; row++) {
-            for (let col = 0; col < 2; col++) {
-                const fragmentX = entity.x + col * newWidth;
-                const fragmentY = entity.y + row * newHeight;
-                const fragment = new Fragment(entity.canvas, entity.gl, {
-                    x: fragmentX,
-                    y: fragmentY,
-                    width: newWidth,
-                    height: newHeight,
-                    color: Array.from(entity.color)
-                });
-                // Apply random velocity to scatter the fragments.
-                fragment.velocity.x = (Math.random() - 0.9) * 3200;
-                fragment.velocity.y = (Math.random() - 0.9) * 3100;
-                fragment.hasGravity = true;
-                fragments.push(fragment);
-            }
-        }
-        return fragments;
     }
 }
 export default Player;

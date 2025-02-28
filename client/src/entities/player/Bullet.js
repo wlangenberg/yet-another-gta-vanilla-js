@@ -3,12 +3,12 @@ import Fragment from "../fragments/Fragment.js";
 import Platform from "../platforms/platform.js";
 import socket from "../../systems/sockets.js";
 import { STATE } from "../../configuration/constants.js";
+import { canvas, ctx as gl } from "../../configuration/canvas.js";
 
 class Bullet extends BaseEntity {
-  constructor(canvas, gl, { x, y, rotation, speed = 800, damage = 10, lifetime = 2 } = {}) {
+  constructor({ x, y, rotation, speed = 800, damage = 10, lifetime = 2 } = {}) {
     // Set a small hitbox for the bullet (e.g., 10x5) and a red color.
-    super(x, y, 10, 5, [1.0, 0.0, 0.0, 1.0], canvas);
-    this.gl = gl;
+    super({x, y, width: 10, height: 5, color: [1.0, 0.0, 0.0, 1.0]});
     this.rotation = rotation;
     this.damage = damage;
     this.speed = speed;
@@ -43,7 +43,6 @@ class Bullet extends BaseEntity {
   }
 
   onCollision(hitEntity, allEntities) {
-    // Skip collision with the owner of the bullet
     if (hitEntity.id === this.ownerId) {
       return;
     }
@@ -58,42 +57,16 @@ class Bullet extends BaseEntity {
         socket.sendHitReport(hitEntity.id, this.damage);
       }
     }
+
+    const index = allEntities.findIndex(entity => entity === hitEntity && hitEntity.type !== 'player');
     
-  // If the hit entity is a platform, split it into fragments
-  if (hitEntity instanceof Platform) {
-    // If this is a bullet from the local player, notify the server about platform destruction
-    if (STATE.myPlayer && this.ownerId === STATE.myPlayer.id) {
-      socket.sendPlatformDestroy(hitEntity.id);
+    if (index !== -1) {
+      socket.sendPlatformDestroy(allEntities[index].id)
+      allEntities.splice(index, 1); // Remove the entity from the array
+      this.deleteSelf(allEntities)
+      if (hitEntity instanceof Platform) this.splitEntity(hitEntity, allEntities)
       
-      // Remove the platform from entities immediately for the local player
-      const platformIndex = allEntities.indexOf(hitEntity);
-      if (platformIndex > -1) {
-        allEntities.splice(platformIndex, 1);
-      }
-      
-      // Split the platform into fragments
-      const fragments = this.splitEntity(hitEntity, allEntities);
-      
-      // If fragments were created, notify the server about fragment creation
-      if (fragments.length > 0) {
-        for (const fragment of fragments) {
-          // Set the original entity ID to track which platform this fragment came from
-          fragment.originalEntityId = hitEntity.id;
-          
-          // Generate a unique ID for the fragment if it doesn't have one
-          if (!fragment.id) {
-            fragment.id = Date.now() * 1000 + Math.floor(Math.random() * 1000);
-          }
-          
-          // Send fragment creation message
-          socket.sendFragmentCreate(fragment);
-        }
-      }
     }
-    // For non-local players, the platform will be removed and fragments created when
-    // the server broadcasts the platform destruction and fragment creation messages
-  }
-    
     // Delete the bullet after collision
     this.deleteSelf(allEntities);
   }
@@ -118,7 +91,7 @@ class Bullet extends BaseEntity {
             const fragmentX = entity.x + col * fragmentSize;
             const fragmentY = entity.y + row * fragmentSize;
             
-            const fragment = new Fragment(entity.canvas, entity.gl, {
+            const fragment = new Fragment( {
                 x: fragmentX,
                 y: fragmentY,
                 width: fragmentSize,
@@ -130,8 +103,8 @@ class Bullet extends BaseEntity {
             fragment.hasCollision = true;
             fragment.hasGravity = true;
             fragment.sleeping = false;
-            fragment.velocity.x = (Math.random() - 0.5) * 3200;
-            fragment.velocity.y = (Math.random() - 0.5) * 3100;
+            fragment.velocity.x = (Math.random() - 0.5) * 13200;
+            fragment.velocity.y = (Math.random() - 0.5) * 13100;
 
             allEntities.push(fragment);
             fragments.push(fragment);

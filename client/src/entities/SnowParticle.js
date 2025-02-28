@@ -1,9 +1,9 @@
 import { BaseEntity } from "./core/BaseEntity.js";
 
 class Snow extends BaseEntity {
-    constructor(x, y, size, canvas) {
+    constructor({ x, y, width} ) {
         // White color with slight transparency
-        super(x, y, size, size, [1.0, 1.0, 1.0, 0.8], canvas);
+        super({x, y, width, width, color: [1.0, 1.0, 1.0, 0.8]});
         
         this.hasGravity = true;
         this.gravity = 150; // Lighter gravity for snow

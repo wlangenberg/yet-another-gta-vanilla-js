@@ -1,71 +1,88 @@
 import { gravity, allEntities } from '../../configuration/constants.js';
 import CollisionCore from '../../systems/CollisionCore.js';
 import uiManager from '../../systems/UIManager.js';
-
+import { canvas, ctx as gl } from '../../configuration/canvas.js';
 // Shared transformation matrices to avoid creating new ones each frame
 const modelMatrix = mat4.create();
 const transformMatrix = mat4.create();
 const tempVec3 = vec3.create();
 
 class BaseEntity extends CollisionCore {
-    constructor(x, y, width, height, color, canvas, type, layer) {
+    constructor(options = {}) {
         super();
-        // Generate a more unique ID using timestamp and random number
-        this.id = Date.now() + Math.floor(Math.random() * 1000000);
+        // Extract options with defaults
+        const {
+            id = Date.now() + Math.floor(Math.random() * 1000000),
+            x = 0,
+            y = 0,
+            width = 50,
+            height = 50,
+            color = [1.0, 1.0, 1.0, 1.0],
+            type = 'entity',
+            layer = 1,
+            velocity = { x: 0, y: 0 },
+            rotation = 0,
+            direction = 0,
+            faceDirection = 1,
+            health = 100,
+            maxHealth = 100,
+            isDead = false
+        } = options;
+        
+        // Basic properties
+        this.id = id;
         this.x = x;
         this.y = y;
         this.width = width;
         this.height = height;
         this.color = new Float32Array(color); // Pre-allocate color array
-        this.canvas = canvas;
-        this.gl = null;
-        this.velocity = { x: 0, y: 0 };
+        
+        // Physics properties
+        this.velocity = { ...velocity }; // Clone to avoid reference issues
         this.friction = 0.75;
         this.airFriction = 0.85;
         this.gravity = gravity;
         this.grounded = true;
         this.hasGravity = true;
-        this.hasCollision = true
-        // Set a default stepHeight (in pixels) for stepping up small ledges.
+        this.hasCollision = true;
+        
+        // Movement properties
         this.stepHeight = this.height / 3;
         this.lastYMovement = 0;
-        this.type = type
-        // Cache half dimensions for render calculations
+        this.direction = direction;
+        this.faceDirection = faceDirection;
+        
+        // Entity type and rendering
+        this.type = type;
         this.halfWidth = width / 2;
         this.halfHeight = height / 2;
-
-        // Add mass property based on area (this can be customized as needed)
         this.mass = width * height;
-
-        // Sleeping state flag for optimization.
-        // When true, the update function returns immediately unless a moving neighbor wakes it.
         this.sleeping = true;
-        this.scale = 1.0; 
-
-        // Initialize attachment properties
+        this.scale = 1.0;
+        
+        // Attachment properties
         this.attachedTo = null;
         this.attachmentOffset = { x: 0, y: 0 };
-        this.renderLayer = layer ?? 1; // Default layer
-        this.defaultLayer = 1; // Store the default layer for this entity
-        this.rotation = 0;
+        this.renderLayer = layer;
+        this.defaultLayer = layer;
+        this.rotation = rotation;
         this.isActive = false;
         
         // Health and damage properties
-        this.maxHealth = 100;
-        this.health = this.maxHealth;
-        this.isDead = false;
+        this.maxHealth = maxHealth;
+        this.health = health;
+        this.isDead = isDead;
         this.invulnerable = false;
         this.invulnerabilityTime = 0;
-        this.invulnerabilityDuration = 1; // 1 second of invulnerability after taking damage
+        this.invulnerabilityDuration = 1;
         this.respawnTime = 0;
-        this.respawnDuration = 3; // 3 seconds to respawn
-        this.lastDamagedBy = null; // Track who last damaged this entity
+        this.respawnDuration = 3;
+        this.lastDamagedBy = null;
         
         this.updateDimensions();
     }
 
     init(gl) {
-        this.gl = gl;
     }
 
     setRenderLayer(layer) {
@@ -110,6 +127,33 @@ class BaseEntity extends CollisionCore {
         }
     }
 
+    // Interpolation properties
+    isInterpolating = false;
+    prevX = 0;
+    prevY = 0;
+    targetX = 0;
+    targetY = 0;
+    interpolationStartTime = 0;
+    interpolationDuration = 100; // ms
+    
+    // Track last sent state to avoid redundant updates
+    lastSentState = {
+        x: 0,
+        y: 0,
+        rotation: 0,
+        direction: 0,
+        faceDirection: 1,
+        velocityX: 0,
+        velocityY: 0,
+        timestamp: 0
+    };
+    
+    // Threshold for position updates
+    updateThreshold = 0.1;
+    
+    // Minimum time between updates (ms)
+    updateInterval = 50;
+    
     update(interval, allEntities, spatialGrid) {
         // Handle death and respawn
         if (this.isDead) {
@@ -128,6 +172,28 @@ class BaseEntity extends CollisionCore {
             if (this.invulnerabilityTime <= 0) {
                 this.invulnerable = false;
             }
+        }
+        
+        // Handle interpolation for remote players
+        if (this.isInterpolating && !this.isLocalPlayer) {
+            const now = performance.now();
+            const elapsed = now - this.interpolationStartTime;
+            const progress = Math.min(elapsed / this.interpolationDuration, 1);
+            
+            // Smooth interpolation using ease-out function
+            const t = 1 - Math.pow(1 - progress, 2);
+            
+            // Update position with interpolation
+            this.x = this.prevX + (this.targetX - this.prevX) * t;
+            this.y = this.prevY + (this.targetY - this.prevY) * t;
+            
+            // If interpolation is complete, reset flag
+            if (progress >= 1) {
+                this.isInterpolating = false;
+            }
+            
+            // Skip the rest of the update for remote players being interpolated
+            return;
         }
         
         if (this.attachedTo) {
@@ -179,7 +245,7 @@ class BaseEntity extends CollisionCore {
                 this.isActive = false;
                 this.lastYMovement = 0;
                 return;
-            }              
+            }
         } else if (this.lastYMovement > 3) {
             this.sleeping = true;
             this.grounded = true;
@@ -201,6 +267,9 @@ class BaseEntity extends CollisionCore {
         this.handleVelocityOptimized(interval, spatialGrid, allEntities);
         // Apply friction.
         this.applyFriction();
+        
+        // Send multiplayer updates if this is a networked entity and not sleeping
+        this.sendNetworkUpdate();
     }
 
     applyGravity(interval) {
@@ -252,7 +321,7 @@ class BaseEntity extends CollisionCore {
         
         for (const obj of objectsX) {
             if (obj !== this && obj.hasCollision && obj.type !== 'bullet'  && CollisionCore.staticCheckCollision(this, obj)) {
-                if ((this.type === 'gun' && obj.isLocalPlayer) || (this.isLocalPlayer && obj.type === 'gun')) continue
+                if ((this.type === 'gun' && obj.isLocalPlayer) || (this.isLocalPlayer && obj.type === 'gun') || (this.ownerId === obj.id)) continue
 
                 collidedX = true;
                 collidedObject = obj;
@@ -292,7 +361,7 @@ class BaseEntity extends CollisionCore {
         
         for (const obj of objectsY) {
             if (obj !== this && obj.hasCollision && obj.type !== 'bullet' && CollisionCore.staticCheckCollision(this, obj)) {
-                if ((this.type === 'gun' && obj.isLocalPlayer) || (this.isLocalPlayer && obj.type === 'gun')) continue
+                if ((this.type === 'gun' && obj.isLocalPlayer) || (this.isLocalPlayer && obj.type === 'gun')  || (this.ownerId === obj.id)) continue
                 collidedY = true;
                 this.onCollision(obj, allEntities);
                 
@@ -334,6 +403,95 @@ class BaseEntity extends CollisionCore {
         if (Math.abs(this.velocity.x) < 0.01) {
             this.velocity.x = 0;
         }
+    }
+    
+    /**
+     * Send network updates for this entity if it's networked and has changed significantly
+     */
+    sendNetworkUpdate() {
+        // Skip if the entity is sleeping and not a player or gun
+        if (this.sleeping && !this.isLocalPlayer && this.type !== 'gun') {
+            return;
+        }
+        
+        const now = performance.now();
+        const timeSinceLastUpdate = now - this.lastSentState.timestamp;
+        
+        // Skip update if not enough time has passed since last update
+        if (timeSinceLastUpdate < this.updateInterval) {
+            return;
+        }
+        
+        // Check if the entity has moved enough to warrant an update
+        const hasMovedEnough =
+            Math.abs(this.lastSentState.x - this.x) > this.updateThreshold ||
+            Math.abs(this.lastSentState.y - this.y) > this.updateThreshold;
+            
+        // For guns, also check rotation changes
+        const hasRotationChanged =
+            this.rotation !== undefined &&
+            Math.abs(this.lastSentState.rotation - this.rotation) > 0.1;
+        // if (!hasMovedEnough && !hasRotationChanged) {
+        //     return; // Skip update if entity hasn't changed significantly
+        // }         
+        // Check if direction or face direction has changed
+        const hasDirectionChanged =
+            this.direction !== undefined &&
+            this.lastSentState.direction !== this.direction;
+            
+        const hasFaceDirectionChanged =
+            this.faceDirection !== undefined &&
+            this.lastSentState.faceDirection !== this.faceDirection;
+            
+        // Check if velocity has changed significantly
+        const hasVelocityChanged =
+            Math.abs(this.lastSentState.velocityX - this.velocity.x) > 0.5 ||
+            Math.abs(this.lastSentState.velocityY - this.velocity.y) > 0.5;
+            
+        // Skip update if entity hasn't changed significantly
+        if (!hasMovedEnough && !hasRotationChanged && !hasDirectionChanged &&
+            !hasFaceDirectionChanged && !hasVelocityChanged) {
+            return;
+        }
+        
+        // Update last sent state
+        this.lastSentState = {
+            x: this.x,
+            y: this.y,
+            rotation: this.rotation || 0,
+            direction: this.direction || 0,
+            faceDirection: this.faceDirection || 1,
+            velocityX: this.velocity.x,
+            velocityY: this.velocity.y,
+            timestamp: now
+        };
+        
+        // Import socket dynamically to avoid circular dependencies
+        import('../../systems/sockets.js').then(module => {
+            const socket = module.default;
+            
+            // If this is a gun, send gun attachment update
+            if (this.type === 'gun' && this.attachedTo) {
+                socket.sendGunAttachment(
+                    this.id,
+                    this.attachedTo.id,
+                    this.attachmentOffset.x,
+                    this.attachmentOffset.y,
+                    this.rotation || 0
+                );
+            }
+            // If this is the local player, send player update
+            else if (this.isLocalPlayer) {
+                // For player entities, ensure we're using the server-assigned ID if available
+                if (this.serverIdAssigned) {
+                    // Make a copy of this object with the correct ID
+                    const entityData = { ...this };
+                    socket.updatePlayerState(entityData);
+                } else {
+                    socket.updatePlayerState(this);
+                }
+            }
+        });
     }
 
     setScale(scale) {

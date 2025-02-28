@@ -2,16 +2,15 @@ import { BaseEntity } from "../core/BaseEntity.js";
 import CollisionCore from "../../systems/CollisionCore.js";
 import socket from "../../systems/sockets.js";
 import { STATE } from "../../configuration/constants.js";
-
+import { canvas, ctx as gl } from "../../configuration/canvas.js";
 class Fragment extends BaseEntity {
-	constructor(canvas, gl, { x, y, width, height, color }) {
-		super(x, y, width, height, color, canvas);
+	constructor({ x, y, width, height, color }) {
+		super({x, y, width, height, color});
 		this.lifetime = 5.0; // Lifetime in seconds before the fragment is considered destroyed.
         this.enableLife = false;
 		this.destroyed = false;
 		this.isFragment = true;
 		this.originalEntityId = 0; // ID of the entity this fragment came from
-		this.gl = gl;
 		this.type = 'fragment';
 		this.renderLayer = 1; // Ensure fragments are visible
 	}
