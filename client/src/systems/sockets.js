@@ -21,7 +21,7 @@ class Socket {
     
     connectOnline() {
         const wsUrl = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-            ? `ws://127.0.0.1:8081/ws`
+            ? `ws://localhost:8081/ws`
             : `wss://${location.hostname}/ws`;
         
         this.ws = new WebSocket(wsUrl);
